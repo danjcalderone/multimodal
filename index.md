@@ -11,7 +11,21 @@ GRAPHS = {'drive': GRAPH, 'walk': GRAPH,'transit': GRAPH or FEED,'ondemand': GRA
 WORLD = {'drive': NETWORK, 'walk': NETWORK, 'transit': NETWORK,' ondemand': NETWORK}
 ```
 
-
+```
+NETWORK = {'graph': GRAPH,
+           'trips': { (from_node1,to_node1):TRIP_DETAILS,
+                      (from_node2,to_node2):TRIP_DETAILS,
+                      ...
+                    },
+            'active_trips': [(from_node1,to_node1),
+                             (from_node2,to_node2),
+                              ....],
+            'edge_masses',
+            'edge_costs',
+            'current_edge_mass': dict of current masses on each edge in graph,
+            'current_edge_costs': dict of masses on each edge in graph,
+          }
+```
 ```
 Sample text here...
 ```
