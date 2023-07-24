@@ -18,10 +18,11 @@ Indented code
 --->
 
     // GRAPH = {
+    'drive': _GRAPH OBJECT_,
+    'drive': _GRAPH OBJECT_,
     'drive': blah,
-    'drive': blah,
-    'drive': blah,
-    'drive': blah,
+    'drive': blah
+    }
 
 Block code "fences"
 
