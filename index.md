@@ -1,7 +1,7 @@
 
 # DOCUMENTATION -- Multi-Modal Transit Simulation for CARTA
 
-![title](Images/example.png)
+![title](multimodal_example.png)
 
 
 
