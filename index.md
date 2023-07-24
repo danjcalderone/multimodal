@@ -16,14 +16,14 @@ Inline `code`
 
 Indented code
 --->
-
-    // GRAPH = {
+```
+    GRAPH = {
     'drive': GRAPH OBJECT,
     'walk': GRAPH OBJECT,
     'transit': GRAPH or FEED OBJECT,
     'ondemand': GRAPH OBJECT
     }
-
+```
 Block code "fences"
 
 ```
