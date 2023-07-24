@@ -53,6 +53,7 @@ PREFS = {
 
 ```
 convertNode(node,from_type,to_type,NODES):
+    """
     description -- converts nodes (at approx the same location) between two different graph types 
     inputs --
            node: node to convert
@@ -61,9 +62,11 @@ convertNode(node,from_type,to_type,NODES):
            NODES: node conversion dict - contains dataframes with conversion information
     returns --
            node in desired mode
+    """
 ```
 ```
 def addNodeToDF(node,mode,GRAPHS,NODES):
+    """
     description -- adds a new node to the NODES conversion dataframe
     inputs --
           node: node to add
@@ -71,9 +74,12 @@ def addNodeToDF(node,mode,GRAPHS,NODES):
           GRAPHS: graphs object containing all graph types
           NODES: node conversion dict - contains dataframes with conversion information
     returns --
+    """
 
 def updateNodesDF(NODES):
+    """
     description -- updates NODES so each dataframe contains all nodes
+    """ 
 ```
 
 ```
