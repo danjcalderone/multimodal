@@ -8,19 +8,16 @@
 
 ```
 GRAPHS = {
-    'drive': GRAPH OBJECT,
-    'walk': GRAPH OBJECT,
-    'transit': GRAPH or FEED OBJECT,
-    'ondemand': GRAPH OBJECT
+    'drive': GRAPH,
+    'walk': GRAPH,
+    'transit': GRAPH or FEED,
+    'ondemand': GRAPH
     }
 ```
 
 ```
-GRAPHS = {
-    'drive': {
-        GRAPH OBJECT
-        }
-    'walk': similar,
+WORLD = {'drive': NETWORK,
+    'walk': NETWORK OBJECT,
     'transit': similar,
     'ondemand': similar,
     }
