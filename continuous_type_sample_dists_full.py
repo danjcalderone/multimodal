@@ -25,9 +25,9 @@ warnings.filterwarnings('ignore')
 
 import random
 import sys
-sys.path.append('/Users/dan/Documents/code');
-from drawing import * 
-sys.path.remove('/Users/dan/Documents/code');
+# sys.path.append('/Users/dan/Documents/code');
+# from drawing import * 
+# sys.path.remove('/Users/dan/Documents/code');
 
 
 
