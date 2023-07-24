@@ -7,13 +7,25 @@
 # OBJECTS
 
 ```
-    GRAPH = {
+GRAPHS = {
     'drive': GRAPH OBJECT,
     'walk': GRAPH OBJECT,
     'transit': GRAPH or FEED OBJECT,
     'ondemand': GRAPH OBJECT
     }
 ```
+
+```
+GRAPHS = {
+    'drive': {
+        GRAPH OBJECT
+        }
+    'walk': similar,
+    'transit': similar,
+    'ondemand': similar,
+    }
+```
+
 
 ```
 Sample text here...
