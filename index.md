@@ -7,20 +7,8 @@
 # OBJECTS
 
 ```
-GRAPHS = {
-    'drive': GRAPH,
-    'walk': GRAPH,
-    'transit': GRAPH or FEED,
-    'ondemand': GRAPH
-    }
-```
-
-```
-WORLD = {'drive': NETWORK,
-    'walk': NETWORK OBJECT,
-    'transit': similar,
-    'ondemand': similar,
-    }
+GRAPHS = {'drive': GRAPH, 'walk': GRAPH,'transit': GRAPH or FEED,'ondemand': GRAPH}
+WORLD = {'drive': NETWORK, 'walk': NETWORK, 'transit': NETWORK,' ondemand': NETWORK}
 ```
 
 
