@@ -6,7 +6,10 @@
 
 
 # FILES
-continuous
+### multimodal_simulation.ipynb 
+python notebook that runs the simulation engine
+### multimodal_functions.py
+support functions for simulation
 
 
 
