@@ -27,13 +27,26 @@ NETWORK = {'graph': GRAPH,
           }
 ```
 ```
-TRIP_DETAILS: {
+TRIP_DETAILS = {
            'active': True or False (indicates whether or not the trip is active. 
-           'costs': 
+           'costs': PREFS,
            'path': [path at iter 1, path at iter 2, etc....],
            'current_path': current shortest path - list of nodes,
            }
 ```
+
+```
+PREFS = {
+           'current_time': value of current time cost,
+           'current_money': value of current money cost,
+           'current_conven': value of current conven cost,
+           'current_switches': value of current switching cost,
+           'time': list of time costs over iterations,
+           'money': list of money costs over iterations,
+           'conven': list of conven costs over iterations,
+           'switches': list of switching costs over iterations,
+           }
+
 ```
 Sample text here...
 ```
