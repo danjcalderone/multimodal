@@ -5,3 +5,9 @@
 
 
 # Objects 
+
+
+GRAPHS = {'d _asdf_
+
+WORLD = {
+  
