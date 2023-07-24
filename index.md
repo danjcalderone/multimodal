@@ -5,17 +5,7 @@
 
 
 # OBJECTS
-<!---
-GRAPHS = {'drive': _ graph object - drive network_, \newline
-          'walk': _ graph object - walk network_, \newline
-          'ondemand': _ graph object - ondemand network_, \newline
-          'transit': _ graph object - transit network_ }
 
-WORLD = {}
-Inline `code`
-
-Indented code
---->
 ```
     GRAPH = {
     'drive': GRAPH OBJECT,
@@ -24,7 +14,6 @@ Indented code
     'ondemand': GRAPH OBJECT
     }
 ```
-Block code "fences"
 
 ```
 Sample text here...
