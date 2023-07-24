@@ -4,8 +4,7 @@
 # Multi-Modal Transit Simulation for CARTA
 
 
-# Objects 
-
+# OBJECTS
 
 GRAPHS = {'drive': _ graph object - drive network_, \newline
           'walk': _ graph object - walk network_, \newline
@@ -13,6 +12,62 @@ GRAPHS = {'drive': _ graph object - drive network_, \newline
           'transit': _ graph object - transit network_ }
 
 WORLD = {}
+Inline `code`
+
+Indented code
+
+    // GRAPH = {
+    'drive': blah,
+    'drive': blah,
+    'drive': blah,
+    'drive': blah,
+
+Block code "fences"
+
+```
+Sample text here...
+```
+
+Syntax highlighting
+
+``` js
+var foo = function (bar) {
+  return bar++;
+};
+
+console.log(foo(5));
+```
+
+
+# FUNCTIONS
+
+Inline `code`
+
+Indented code
+
+    // GRAPH = {
+    'drive': blah,
+    'drive': blah,
+    'drive': blah,
+    'drive': blah,
+
+Block code "fences"
+
+```
+Sample text here...
+```
+
+Syntax highlighting
+
+``` js
+var foo = function (bar) {
+  return bar++;
+};
+
+console.log(foo(5));
+```
+
+
   
 
 ---
