@@ -165,52 +165,7 @@ def planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=False):
     returns --
 ```
 
-
-    trip = (source,target);
-    GRAPH = GRAPHS[mode];
-    try:
-        temp = nx.multi_source_dijkstra(GRAPH, [source], target=target, weight='c');
-        distance = temp[0];
-        path = temp[1]; 
-    except: 
-        #print('no path found for bus trip ',trip,'...')
-        distance = 1000000;
-        path = [];
-
-    if not(trip in WORLD[mode]['trips'].keys()):
-        WORLD[mode]['trips'][trip] = {};
-        WORLD[mode]['trips'][trip]['costs'] = {'time':[],'money':[],'conven':[],'switches':[]}
-        #WORLD[mode]['trips'][trip]['costs'] = {'current_time':[],'current_money':[],'current_conven':[],'current_switches':[]}
-        WORLD[mode]['trips'][trip]['path'] = [];
-        WORLD[mode]['trips'][trip]['mass'] = 0;
-
-    WORLD[mode]['trips'][trip]['costs']['current_time'] = distance
-    WORLD[mode]['trips'][trip]['costs']['current_money'] = 1;
-    WORLD[mode]['trips'][trip]['costs']['current_conven'] = 1; 
-    WORLD[mode]['trips'][trip]['costs']['current_switches'] = 1; 
-    WORLD[mode]['trips'][trip]['current_path'] = path;
-    WORLD[mode]['trips'][trip]['mass'] = 0;
-    
-    if track==True:
-        WORLD[mode]['trips'][trip]['costs']['time'].append(distance)
-        WORLD[mode]['trips'][trip]['costs']['money'].append(1)
-        WORLD[mode]['trips'][trip]['costs']['conven'].append(1)
-        WORLD[mode]['trips'][trip]['costs']['switches'].append(1)
-        WORLD[mode]['trips'][trip]['path'].append(path);
-
-    if mass > 0:
-        for j,node in enumerate(path):
-            if j < len(path)-1:
-                edge = (path[j],path[j+1],0)
-                edge_mass = WORLD[mode]['edge_masses'][edge][-1] + mass;
-                edge_cost = 1.*edge_mass + 1.;
-                WORLD[mode]['edge_masses'][edge][-1] = edge_mass;
-                WORLD[mode]['edge_costs'][edge][-1] = edge_cost;
-                WORLD[mode]['current_edge_costs'][edge] = edge_cost;    
-                WORLD[mode]['current_edge_masses'][edge] = edge_mass;
-
-
-
+<!---
 def queryTrip(TRIP,PERSON,NODES,GRAPHS,WORLD):
     trip_cost = 0;
     costs_to_go = [];
@@ -284,7 +239,7 @@ def queryTrip(TRIP,PERSON,NODES,GRAPHS,WORLD):
 
 ```
 
-
+--->
 <!---
 def bus_stop_nodes(feed, graph):
     BUS_STOP_NODES = {};
@@ -350,7 +305,7 @@ recompute_foot_transfers = True;
   
 
 
-
+<!---
 ##### UPDATE CHOICES ##### UPDATE CHOICES ##### UPDATE CHOICES ##### UPDATE CHOICES ##### UPDATE CHOICES 
 ##### UPDATE CHOICES ##### UPDATE CHOICES ##### UPDATE CHOICES ##### UPDATE CHOICES ##### UPDATE CHOICES 
 ##### UPDATE CHOICES ##### UPDATE CHOICES ##### UPDATE CHOICES ##### UPDATE CHOICES ##### UPDATE CHOICES 
@@ -1409,179 +1364,15 @@ def tsp_dual(grads):
     lamval = tsp['cost'];
     return {'x':xvals,'lam':lamval,'tsp':tsp,'pickups':pickups} #,'v':vvals}      
 
-
-
-
-##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND 
-##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND 
-##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND 
-##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND ##### OLD ONDEMAND 
-
-
-
-# def next_node(graph,nodes,current,sink,typ = 'straight'):
-#     remaining_nodes = nodes;
-#     sink_loc = np.array([graph.nodes[sink]['x'],graph.nodes[sink]['y']])
-#     current_loc = np.array([graph.nodes[current]['x'],graph.nodes[current]['y']])
-#     dists = [];
-    
-#     for i,node in enumerate(remaining_nodes):
-#         if typ=='straight':        
-#             x = graph.nodes[node]['x'];
-#             y = graph.nodes[node]['y'];
-#             loc = np.array([x,y]);
-#             dist_to_sink = mat.norm(loc-sink_loc);
-#             dist_to_current = mat.norm(loc-current_loc);
-#             if i == 0:
-#                 dist_total = dist_to_sink; # + dist_to_current;
-#             else:
-#                 dist_total = dist_to_current
-#             dists.append(dist_total)
-                    
-#     dists = np.array(dists);
-#     ind = np.where(dists==np.min(dists))[0][0]
-#     return {'ind':ind,'node':nodes[ind]}
-    
-
-# # DONE 
-# def order_pickups(graph,nodes,sink,typ='straight'):
-#     nodes_left = nodes.copy();
-#     path = [];
-#     current = sink;
-#     for i in range(len(nodes)):
-#         next_stop = next_node(graph,nodes_left,current,sink,typ=typ);
-#         path.append(next_stop['node']);
-#         nodes_left.pop(next_stop['ind'])
-#         current = path[-1]
-#     return path
-
-# # DONE
-# def traveling_salesman(graph,pickups,sink):
-#     route = [];
-#     cost = 0;
-#     costs = []
-#     current_len = []
-#     for i in range(len(pickups)):
-#         current_len.append(len(route))
-#         start_node = pickups[i]
-#         if i == (len(pickups)-1):
-#             end_node = sink;
-#         else: 
-#             end_node = pickups[i+1]
-#         try:
-#             path = nx.shortest_path(graph, source=start_node, target=end_node,weight = 'c'); #, weight=None);
-#             cost = cost + nx.shortest_path_length(graph, source=start_node, target=end_node, weight='c')            
-#         except:
-#             path =[];
-#             cost = cost + 0;
-#         costs.append(cost)
-#         route = route + path
-#     current_len.append(len(route))
-#     return {'route':route,'cost':cost,'current_len':current_len}
-
-
-
-# def traveling_salesman_groups(graph,pickups,dropoffs):
-#     route = [];
-#     cost = 0;
-#     costs = []
-#     current_len = []
-#     for i in range(len(pickups)):
-#         current_len.append(len(route))
-#         start_node = pickups[i]
-#         if i == (len(pickups)-1):
-#             end_node = sink;
-#         else: 
-#             end_node = pickups[i+1]
-#         path = nx.shortest_path(graph, source=start_node, target=end_node,weight = 'c'); #, weight=None);
-#         cost = cost + nx.shortest_path_length(graph, source=start_node, target=end_node, weight='c')
-#         costs.append(cost)
-#         route = route + path
-#     current_len.append(len(route))
-#     return {'route':route,'cost':cost,'current_len':current_len}
-
-
-# def tsp_dual(grads):  
-#     lam = grads['lam']
-#     pickups = current_pickups(lam,all_pickup_nodes)
-#     nx.set_edge_attributes(graph,{k:v for k,v in zip(graph.edges,grads['c'])},'c')
-#     #tsp = nx.approximation.traveling_salesman_problem(graph, nodes=curr,cycle=True, method=None)
-#     ordered_pickups = order_pickups(graph,pickups,sink);
-#     ordered_pickups = ordered_pickups[::-1]
-#     tsp = traveling_salesman(graph,ordered_pickups,sink)
-#     xvals = np.ones(ne);
-#     lamval = tsp['cost'];
-#     return {'x':xvals,'lam':lamval,'tsp':tsp,'pickups':pickups} #,'v':vvals}      
-
-
-# def plan_travel_drive(start,end,plan=None):    
-#     if plan == None:
-#         path = nx.shortest_path(graph, source=start, target=end,weight = 'c'); #, weight=None);
-#         cost = cost + nx.shortest_path_length(graph, source=start_node, target=end_node, weight='c')
-#     costs.append(cost)
-#     route = route + path
-#     shortest_path #drive
-    
-# def plan_travel_ondemand(start,end,schedule):
-#     plan = schedule[start];
-#     trip = plan['trip']
-#     cost = plan['cost']
-#     return {'trip':trip,'cost':cost}
-
-# def plan_travel_walktransit():
-#     shortest_path #walk
-#     access_transit_schedule
-# def plan_travel_ondemandtransit():
-#     access_ondemand_schedule
-#     access_transit_schedule
-
-#### WORLD STATE #### WORLD STATE #### WORLD STATE #### WORLD STATE #### WORLD STATE 
-#### WORLD STATE #### WORLD STATE #### WORLD STATE #### WORLD STATE #### WORLD STATE 
-#### WORLD STATE #### WORLD STATE #### WORLD STATE #### WORLD STATE #### WORLD STATE 
-
-
-        #print(WORLD['ondemand']['costs'].keys())
-    #pickups = WORLD['ondemand']['sources']
-#     pickups = WORLD['ondemand']['people']    
-
-#     resegment = False;
-#     if resegment:
-#         temp = segment_pickups(PEOPLE,WORLD,DELIVERY); #graph,pickups,num);
-#         clients = temp['clients'];
-#         sources = temp['sources'];
-#         targets = temp['targets'];
-#     else:
-#         deliveries = list(DELIVERY.keys());
-#         clients = [DELIVERY[delivery]['clients'] for j,delivery in enumerate(deliveries)]
-#         sources = [DELIVERY[delivery]['sources'] for j,delivery in enumerate(deliveries)]
-#         targets = [DELIVERY[delivery]['targets'] for j,delivery in enumerate(deliveries)]
-        
-#     planned_trips = [];
-#     for i,group in enumerate(clients):
-#         nodes = sources[i] + targets[i];
-#         sink = delivery_nodes[i];
-#         nx.set_edge_attributes(graph,{k:v for k,v in zip(graph.edges,np.ones(len(graph.edges)))},'c')        
-#         ordered_pickups = order_pickups(graph,nodes,sink)
-#         ordered_pickups = ordered_pickups[::-1];
-#         tsp = traveling_salesman(graph,ordered_pickups,sink) #######
-#         xvals = np.ones(ne);
-#         lamval = tsp['cost'];
-#         planned_trips.append({'x':xvals,'lam':lamval,'tsp':tsp,'pickups':pickups}) #,'v':vvals}          
-#     return planned_trips
-
-# def update_costs(PEOPLE,WORLD):
-#     for i,node in enumerate(people_nodes):
-#         PERSON = PEOPLE[node];
-#         for o,opt in enumerate(PERSON['opts']):
-#             for j,factor in enumerate(PERSON['factors']):
-#                 PERSON['costs'][opt][factor] = WORLD[opt][node][factor]['cost'];
-    
-
-
-
-
 ```
+--->
 
+
+
+
+
+
+<!---
 Inline `code`
 
 Indented code
@@ -1856,3 +1647,4 @@ It converts "HTML", but keep intact partial entries like "xxxHTMLyyy" and so on.
 ::: warning
 *here be dragons*
 :::
+--->
