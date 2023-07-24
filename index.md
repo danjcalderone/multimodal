@@ -93,8 +93,18 @@ def find_close_node(node,graph,find_in_graph):
           closest node in the find_in_graph
 ```
 
-```
+
+<!---
 def makeTrip2(modes,nodes,NODES,deliveries=[]): #,node_types,NODES,deliveries = []):
+    description -- construct a TRIP object consisting of a sequence of modes.
+    inputs --
+           modes: sequence of travel modes to use (length = n)
+           nodes: sequence of nodes for each segment
+           NODES: node conversion dictionary
+           deliveries: list of ondemand vehicles to use
+     return
+
+           
     trip = {};
     segs = [];
     deliv_counter = 0;
@@ -126,21 +136,36 @@ def makeTrip2(modes,nodes,NODES,deliveries=[]): #,node_types,NODES,deliveries = 
     trip['current']['traj'] = [];
     trip['active'] = False;
     return trip
+--->
 
-
-
+```
 def querySeg(start,end,mode,PERSON,NODES,GRAPHS,WORLD):
-    cost = 0;
-    if not((start,end) in WORLD[mode]['trips'].keys()):  
-        planSeg(start,end,mode,GRAPHS,WORLD,mass=0);
-    # print(PERSON['prefs'].keys())
-    for l,factor in enumerate(PERSON['prefs'][mode]):
-        cost = WORLD[mode]['trips'][(start,end)]['costs']['current_'+factor] # possibly change for delivery
-        diff = cost-PERSON['prefs'][mode][factor]
-        cost = cost + PERSON['weights'][mode][factor]*diff;
-    return cost,WORLD[mode]['trips'][(start,end)]['current_path']
-
+    description -- queries the cost of travel (for a person) along a particular segment in a given mode
+    inputs -- 
+           start: start node
+           end: end node
+           mode: mode of travel
+           PERSON: person object
+           NODES: node conversion dict
+           GRAPHS: graphs object
+           WORLD: network information
+    returns --
+           cost: subjective cost of the trip
+           path: optimal path (list of nodes)
 def planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=False):
+    description -- computes the optimal path for a particular segment
+    inputs -- 
+           source: source node
+           target: target node
+           mode: mode of travel
+           GRAPHS: graphs object
+           WORLD: network information
+           mass: mass to add to edges along the optimal path
+           track: (True or False) add data to iteration tracking record.
+    returns --
+```
+
+
     trip = (source,target);
     GRAPH = GRAPHS[mode];
     try:
