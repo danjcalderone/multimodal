@@ -1,7 +1,8 @@
-# multimodal
+
+# Multi-Modal Transit Simulation for CARTA -- DOCUMENTATION
 
 
-# Multi-Modal Transit Simulation for CARTA
+
 
 
 # OBJECTS
