@@ -27,6 +27,14 @@ NETWORK = {'graph': GRAPH,
           }
 ```
 ```
+TRIP_DETAILS: {
+           'active': True or False (indicates whether or not the trip is active. 
+           'costs': 
+           'path': [path at iter 1, path at iter 2, etc....],
+           'current_path': current shortest path - list of nodes,
+           }
+```
+```
 Sample text here...
 ```
 
