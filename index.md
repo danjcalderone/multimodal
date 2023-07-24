@@ -5,7 +5,7 @@
 
 
 # OBJECTS
-
+<!---
 GRAPHS = {'drive': _ graph object - drive network_, \newline
           'walk': _ graph object - walk network_, \newline
           'ondemand': _ graph object - ondemand network_, \newline
@@ -15,6 +15,7 @@ WORLD = {}
 Inline `code`
 
 Indented code
+--->
 
     // GRAPH = {
     'drive': blah,
