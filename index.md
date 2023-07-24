@@ -60,48 +60,19 @@ PREFS = {
 
 # FUNCTIONS
 
+### STATE OF OVERALL NETWORK
 ```
-convertNode(node,from_type,to_type,NODES):
-    """
-    description -- converts nodes (at approx the same location) between two different graph types 
-    inputs --
-           node: node to convert
-           from_type: initial mode node is given in
-           to_type: desired node type
-           NODES: node conversion dict - contains dataframes with conversion information
-    returns --
-           node in desired mode
-    """
-```
-```
-def addNodeToDF(node,mode,GRAPHS,NODES):
-    """
-    description -- adds a new node to the NODES conversion dataframe
-    inputs --
-          node: node to add
-          mode: original graph type
-          GRAPHS: graphs object containing all graph types
-          NODES: node conversion dict - contains dataframes with conversion information
-    returns --
-    """
-
-def updateNodesDF(NODES):
-    """
-    description -- updates NODES so each dataframe contains all nodes
-    """ 
+def world_of_drive(WORLD,PEOPLE,GRAPHS,verbose=False): #graph,costs,sources, targets):
+    TO BE DOCUMENTED                         
+def world_of_walk(WORLD,PEOPLE,GRAPHS,verbose=False): #graph,costs,sources, targets):
+    TO BE DOCUMENTED 
+def world_of_ondemand2(WORLD,PEOPLE,DELIVERY,GRAPHS,verbose=False):
+    TO BE DOCUMENTED 
+def world_of_transit_graph(WORLD,PEOPLE,GRAPHS,verbose=False):
+    TO BE DOCUMENTED 
 ```
 
-```
-def find_close_node(node,graph,find_in_graph):
-    description -- takes node in one graph and finds the closest node in another graph
-    inputs --
-          node: node to find
-          graph: initial graph node is given in
-          find_in_graph: graph to find the closest node in
-    returns --
-          closest node in the find_in_graph
-```
-
+### TRIP COMPUTATION & CALCULATION
 ```
 def makeTrip2(modes,nodes,NODES,deliveries=[]): #,node_types,NODES,deliveries = []):
     description -- construct a TRIP object consisting of a sequence of modes.
@@ -112,6 +83,7 @@ def makeTrip2(modes,nodes,NODES,deliveries=[]): #,node_types,NODES,deliveries = 
            deliveries: list of ondemand vehicles to use
      return
            trip
+
 def querySeg(start,end,mode,PERSON,NODES,GRAPHS,WORLD):
     description -- queries the cost of travel (for a person) along a particular segment in a given mode
     inputs -- 
@@ -125,6 +97,7 @@ def querySeg(start,end,mode,PERSON,NODES,GRAPHS,WORLD):
     returns --
            cost: subjective cost of the trip
            path: optimal path (list of nodes)
+
 def planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=False):
     description -- computes the optimal path for a particular segment
     inputs -- 
@@ -136,17 +109,18 @@ def planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=False):
            mass: mass to add to edges along the optimal path
            track: (True or False) add data to iteration tracking record.
     returns --
-```
 
-```
 def queryTrip(TRIP,PERSON,NODES,GRAPHS,WORLD):
     TO BE DOCUMENTED
+
 def removeMassFromEdges(mode,WORLD,GRAPHS):
     TO BE DOCUMENTED 
 def addTripMassToEdges(trip,NETWORK):
     TO BE DOCUMENTED 
+
 ```
 
+### BUS TRANSIT SPECIFIC 
 ```
 def bus_stop_nodes(feed, graph):
     TO BE DOCUMENTED 
@@ -159,18 +133,7 @@ def update_choices2(PEOPLE, DELIVERY, NODES, GRAPHS, WORLD, version=1,verbose=Fa
 ```
 
 
-
-```
-def world_of_drive(WORLD,PEOPLE,GRAPHS,verbose=False): #graph,costs,sources, targets):
-    TO BE DOCUMENTED                         
-def world_of_walk(WORLD,PEOPLE,GRAPHS,verbose=False): #graph,costs,sources, targets):
-    TO BE DOCUMENTED 
-def world_of_ondemand2(WORLD,PEOPLE,DELIVERY,GRAPHS,verbose=False):
-    TO BE DOCUMENTED 
-def world_of_transit_graph(WORLD,PEOPLE,GRAPHS,verbose=False):
-    TO BE DOCUMENTED 
-```
-
+### ONDEMAND SPECIFIC
 ```
 def divideDelivSegs(trips,DELIVERY,GRAPHS,WORLD,maxTrips = 1000):
     TO BE DOCUMENTED 
@@ -183,7 +146,42 @@ def order_pickups2(graph,sources,targets,start,typ='straight'):
 def traveling_salesman(graph,pickups,sink):
     TO BE DOCUMENTED 
 ```
-
+### NODE CONVERSION
+```
+convertNode(node,from_type,to_type,NODES):
+    """
+    description -- converts nodes (at approx the same location) between two different graph types 
+    inputs --
+           node: node to convert
+           from_type: initial mode node is given in
+           to_type: desired node type
+           NODES: node conversion dict - contains dataframes with conversion information
+    returns --
+           node in desired mode
+    """
+def find_close_node(node,graph,find_in_graph):
+    description -- takes node in one graph and finds the closest node in another graph
+    inputs --
+          node: node to find
+          graph: initial graph node is given in
+          find_in_graph: graph to find the closest node in
+    returns --
+          closest node in the find_in_graph
+def addNodeToDF(node,mode,GRAPHS,NODES):
+    """
+    description -- adds a new node to the NODES conversion dataframe
+    inputs --
+          node: node to add
+          mode: original graph type
+          GRAPHS: graphs object containing all graph types
+          NODES: node conversion dict - contains dataframes with conversion information
+    returns --
+    """
+def updateNodesDF(NODES):
+    """
+    description -- updates NODES so each dataframe contains all nodes
+    """ 
+```
 
 <!---
 Inline `code`
