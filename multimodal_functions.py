@@ -389,8 +389,8 @@ def querySeg(start,end,mode,PERSON,NODES,GRAPHS,WORLD):
 def planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=False):
     trip = (source,target);
     GRAPH = GRAPHS[mode];
-    if mode == 'transit' and mass > 0:
-        print(mode)
+    # if mode == 'transit' and mass > 0:
+    #     print(mode)
     try:
         temp = nx.multi_source_dijkstra(GRAPH, [source], target=target, weight='c');
         distance = temp[0];
@@ -718,9 +718,10 @@ def world_of_transit_graph(WORLD,PEOPLE,GRAPHS,verbose=False):
         current_costs = {k:v for k,v in zip(GRAPH.edges,np.ones(len(GRAPH.edges)))}
         
     nx.set_edge_attributes(GRAPH,current_costs,'c');
-    removeMassFromEdges('walk',WORLD,GRAPHS) 
+    
 
     mode = 'transit'
+    removeMassFromEdges(mode,WORLD,GRAPHS) 
     segs = WORLD[mode]['active_trips']
     for i,seg in enumerate(segs):
         source = seg[0];
@@ -1116,11 +1117,11 @@ def world_of_drive(WORLD,PEOPLE,GRAPHS,verbose=False): #graph,costs,sources, tar
         current_costs = {k:v for k,v in zip(GRAPH.edges,np.ones(len(GRAPH.edges)))}
         
     nx.set_edge_attributes(GRAPH,current_costs,'c');
-    removeMassFromEdges('drive',WORLD,GRAPHS)
-
-    segs = WORLD['drive']['active_trips']
+    
 
     mode = 'drive'
+    removeMassFromEdges(mode,WORLD,GRAPHS)
+    segs = WORLD[mode]['active_trips']    
     for i,seg in enumerate(segs):
         source = seg[0];
         target = seg[1];
@@ -1163,11 +1164,12 @@ def world_of_walk(WORLD,PEOPLE,GRAPHS,verbose=False): #graph,costs,sources, targ
     else: 
         current_costs = {k:v for k,v in zip(GRAPH.edges,np.ones(len(GRAPH.edges)))}
     nx.set_edge_attributes(GRAPH,current_costs,'c');     
-    removeMassFromEdges('walk',WORLD,GRAPHS)  
+    
 
-    segs = WORLD['walk']['active_trips']
 
     mode = 'walk'
+    removeMassFromEdges(mode,WORLD,GRAPHS)  
+    segs = WORLD[mode]['active_trips']
     for i,seg in enumerate(segs):
         source = seg[0];
         target = seg[1];
