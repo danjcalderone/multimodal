@@ -19,6 +19,12 @@ from itertools import product
 from random import sample
 from shapely.geometry import Polygon, Point
 
+import sklearn as sk
+from sklearn import cluster as cluster
+from sklearn.cluster import OPTICS, cluster_optics_dbscan
+from sklearn import metrics
+from sklearn.cluster import DBSCAN
+
 import time
 import warnings
 warnings.filterwarnings('ignore')
@@ -28,6 +34,63 @@ import sys
 # sys.path.append('/Users/dan/Documents/code');
 # from drawing import * 
 # sys.path.remove('/Users/dan/Documents/code');
+
+
+
+###### ----- NEWEST ----- NEWEST ----- NEWEST ----- NEWEST ----- NEWEST -------- #########
+###### ----- NEWEST ----- NEWEST ----- NEWEST ----- NEWEST ----- NEWEST -------- #########
+###### ----- NEWEST ----- NEWEST ----- NEWEST ----- NEWEST ----- NEWEST -------- #########
+###### ----- NEWEST ----- NEWEST ----- NEWEST ----- NEWEST ----- NEWEST -------- #########
+
+def kmeans_nodes(num,mode,GRAPHS,node_set = 'all',find_nodes=True):
+
+    GRAPH = GRAPHS[mode];
+    feed = GRAPH;
+    if node_set == 'all':
+        if mode == 'gtfs':
+            nodes = feed.stops.index;
+        else:
+            nodes = GRAPH.nodes;
+    else:
+        nodes = node_set;
+
+    MM = []
+    for i,node in enumerate(nodes):
+        if mode == 'gtfs':
+            # feed = GRAPH;
+            lat = feed.stops.stop_lat[node]
+            lon = feed.stops.stop_lon[node]            
+            temp = np.array([lon,lat])
+            MM.append(temp)
+        else:
+            NODE = GRAPH.nodes[node]            
+            lat = NODE['y']
+            lon = NODE['x']
+            temp = np.array([lon,lat])
+            MM.append(temp)            
+    MM = np.array(MM);
+    
+    kmeans = cluster.KMeans(n_clusters=num);
+    kmeans_output = kmeans.fit(MM)
+    centers = kmeans_output.cluster_centers_
+    
+    center_nodes = [];
+    if find_nodes==True:
+        for i,loc in enumerate(centers):
+            if mode == 'gtfs':
+                lon = loc[0];
+                lat = loc[1];
+                eps = 0.01;
+                close = np.abs(feed.stops.stop_lat - lat) + np.abs(feed.stops.stop_lon - lon);
+                close = close==np.min(close)
+                found_stop = feed.stops.stop_id[close];
+                found_stop = list(found_stop)[0]
+                node = found_stop
+                center_nodes.append(node);                
+            else:
+                node = ox.distance.nearest_nodes(GRAPH, loc[0],loc[1])            
+                center_nodes.append(node);
+    return {'centers':centers,'nodes':center_nodes}
 
 
 
@@ -47,18 +110,30 @@ def convertNode(node,from_type,to_type,NODES):
     returns --
            node in desired mode
     """
-
     out = None;
     if from_type == 'all':
         out = NODES['all'][to_type][node]
-    if from_type == 'drive':
-        out = NODES['drive'][to_type][node]
-    if from_type == 'transit':
-        out = NODES['transit'][to_type][node]
-    if from_type == 'walk':
-        out = NODES['walk'][to_type][node]
-    if from_type == 'ondemand':
-        out = NODES['ondemand'][to_type][node]        
+    else:
+        mode =  from_type; # == 'drive':
+        if node in NODES[mode].index:
+            #print(node)
+            out = NODES[mode][to_type][node]
+            if not(isinstance(out,str)):
+                # print(out)
+                out = list(out)
+                out = out[0]
+            
+        else: 
+            updateNodesDF(NODES);
+            out = list(NODES[mode][to_type][node])[0]
+    # if from_type == 'transit':
+    #     out = NODES['transit'][to_type][node]
+    # if from_type == 'walk':
+    #     out = NODES['walk'][to_type][node]
+    # if from_type == 'ondemand':
+    #     out = NODES['ondemand'][to_type][node]
+    # if isinstance(out,list):
+    #     out = out[0]
     return out
 
 
@@ -96,6 +171,53 @@ def find_close_node(node,graph,find_in_graph):
         found_node = None;
     return found_node
 
+
+def find_close_node_gtfs_to_graph(stop,feed,graph):
+
+    # print(list(feed.stops[feed.stops['stop_id']==stop].stop_lat))[0]
+    # asdf
+    # try: 
+
+    # test1 = stop in list(feed.stops['stop_id'])
+    # print(test1)
+    # if test1==False:
+    #     print(stop)
+
+    lat = list(feed.stops[feed.stops['stop_id']==stop].stop_lat)
+    lon = list(feed.stops[feed.stops['stop_id']==stop].stop_lon)
+    # print(lat)
+    # print(lon)
+    lat = lat[0]
+    lon = lon[0]
+    # print(lat)
+    # print(lon)
+    # print(lat)
+    # print(lon)
+    found_node = ox.distance.nearest_nodes(graph, lon,lat)
+        # print(found_node)
+        #found_node = found_node; #ORIG_LOC[i][0], ORIG_LOC[i][1]);
+    # except:
+    #     found_node = 'XXXXXXXXXXXXX';
+
+    # if isinstantce(found_node,list):
+    #     found_node = found_node[0];
+    return found_node
+
+def find_close_node_graph_to_gtfs(node,graph,feed):
+    lon = graph.nodes[node]['x'];
+    lat = graph.nodes[node]['y'];
+    eps = 0.01;
+    close = np.abs(feed.stops.stop_lat - lat) + np.abs(feed.stops.stop_lon - lon);
+    close = close==np.min(close)
+    found_stop = feed.stops.stop_id[close];
+    found_stop = list(found_stop)[0]
+    # if len(found_stop)==0:
+    #     found_stop = None;
+    #     #found_stop = found_stop[0];
+    # if isinstance(found_stop,list):
+    #     found_stop = found_stop[0];    
+    return found_stop     
+
 # def find_close_node(node,graph,find_in_graph):
 #     lon = graph.nodes[node]['x'];
 #     lat = graph.nodes[node]['y'];
@@ -106,32 +228,75 @@ def find_close_node(node,graph,find_in_graph):
 #         found_node = None;
 #     return found_node
 
-
-
-
-
+def drop_duplicates(df):
+    # print(df.astype(str).drop_duplicates().index)
+    # asdf
+    out = df.loc[df.astype(str).drop_duplicates().index]
+    return out 
+#convert hte df to str type, drop duplicates and then select the rows from original df.
 
 
 def addNodeToDF(node,mode,GRAPHS,NODES):
+
+    # print(node)
+    # print(mode)
+
     if not(node in NODES['all'][mode]):
-        node_tags = {'drive':[find_close_node(node,GRAPHS[mode],GRAPHS['drive'])],
-                     'walk':[find_close_node(node,GRAPHS[mode],GRAPHS['walk'])],
-                     'transit':[find_close_node(node,GRAPHS[mode],GRAPHS['transit'])],
-                     'ondemand':[find_close_node(node,GRAPHS[mode],GRAPHS['ondemand'])]}    
+        if mode == 'gtfs':
+            gtfs_node = node;
+            drive_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['drive']);
+            walk_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['walk']);
+            transit_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['transit']);
+            ondemand_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['ondemand']);
+
+        else:
+
+            drive_node = find_close_node(node,GRAPHS[mode],GRAPHS['drive']);
+            walk_node = find_close_node(node,GRAPHS[mode],GRAPHS['walk']);
+            transit_node = find_close_node(node,GRAPHS[mode],GRAPHS['transit']);
+            ondemand_node = find_close_node(node,GRAPHS[mode],GRAPHS['ondemand']);
+            gtfs_node = find_close_node_graph_to_gtfs(node,GRAPHS[mode],GRAPHS['gtfs'])
+
+
+
+        node_tags = {'drive':[drive_node],
+                     'walk':[walk_node],
+                     'transit':[transit_node],
+                     'ondemand':[ondemand_node],
+                     'gtfs':[gtfs_node]}
+
         node_index = 'node'+str(len(NODES['all'].index));
         new_nodes = pd.DataFrame(node_tags,index=[node_index])
         NODES['all'] = NODES['all'].append(new_nodes);
 
+        ### ADDING TO SUB DFS ### ADDING TO SUB DFS ### ADDING TO SUB DFS ### ADDING TO SUB DFS ### ADDING TO SUB DFS 
+        ### ADDING TO SUB DFS ### ADDING TO SUB DFS ### ADDING TO SUB DFS ### ADDING TO SUB DFS ### ADDING TO SUB DFS 
 
-# def addNodeToDF(node,mode,GRAPHS,NODES):
-#     if not(node in NODES['all'][mode]):
-#         node_tags = {'drive':[find_close_node(node,GRAPHS[mode],GRAPHS['drive'])],
-#                      'walk':[find_close_node(node,GRAPHS[mode],GRAPHS['walk'])],
-#                      'transit':[find_close_node(node,GRAPHS[mode],GRAPHS['transit'])],
-#                      'ondemand':[find_close_node(node,GRAPHS[mode],GRAPHS['ondemand'])]}    
-#         node_index = 'node'+str(len(NODES['all'].index));
-#         new_nodes = pd.DataFrame(node_tags,index=[node_index])
-#         NODES['all'] = NODES['all'].append(new_nodes);
+        mode = 'drive'; index_node = drive_node;
+        node_tags = {'walk':[walk_node],'transit':[transit_node],'ondemand':[ondemand_node],'gtfs':[gtfs_node]}
+        new_nodes = pd.DataFrame(node_tags,index=[index_node])
+        NODES[mode] = NODES[mode].append(new_nodes);
+
+        mode = 'walk'; index_node = walk_node;
+        node_tags = {'drive':[drive_node],'transit':[transit_node],'ondemand':[ondemand_node],'gtfs':[gtfs_node]}
+        new_nodes = pd.DataFrame(node_tags,index=[index_node])
+        NODES[mode] = NODES[mode].append(new_nodes);
+
+        mode = 'transit'; index_node = transit_node;
+        node_tags = {'drive':[drive_node],'walk':[walk_node],'ondemand':[ondemand_node],'gtfs':[gtfs_node]}
+        new_nodes = pd.DataFrame(node_tags,index=[index_node])
+        NODES[mode] = NODES[mode].append(new_nodes);
+
+        mode = 'gtfs'; index_node = gtfs_node;
+        node_tags = {'drive':[drive_node],'walk':[walk_node],'transit':[transit_node],'ondemand':[ondemand_node]}
+        new_nodes = pd.DataFrame(node_tags,index=[index_node])
+        NODES[mode] = NODES[mode].append(new_nodes);
+
+        mode = 'ondemand'; index_node = ondemand_node;
+        node_tags = {'drive':[drive_node],'walk':[walk_node],'transit':[transit_node],'gtfs':[gtfs_node]}
+        new_nodes = pd.DataFrame(node_tags,index=[index_node])
+        NODES[mode] = NODES[mode].append(new_nodes);
+
 
     
 def updateNodesDF(NODES):
@@ -139,21 +304,32 @@ def updateNodesDF(NODES):
     NODES['drive'] = NODES['all'].copy();
     NODES['walk'] = NODES['all'].copy();
     NODES['ondemand'] = NODES['all'].copy();
+    NODES['gtfs'] = NODES['all'].copy();
 
     NODES['transit']['transit2'] = NODES['transit']['transit'].copy(); 
     NODES['drive']['drive2'] = NODES['drive']['drive'].copy();
     NODES['walk']['walk2'] = NODES['walk']['walk'].copy();
     NODES['ondemand']['ondemand2'] = NODES['ondemand']['ondemand'].copy(); 
+    NODES['gtfs']['gtfs2'] = NODES['gtfs']['gtfs'].copy(); 
 
     NODES['transit'] = NODES['transit'].set_index('transit2')
     NODES['drive'] = NODES['drive'].set_index('drive2')
     NODES['walk'] = NODES['walk'].set_index('walk2')
     NODES['ondemand'] = NODES['ondemand'].set_index('ondemand2')
-    
-    NODES['transit'] = NODES['transit'][~NODES['transit'].index.duplicated(keep='first')];
-    NODES['drive'] = NODES['drive'][~NODES['drive'].index.duplicated(keep='first')];
-    NODES['walk'] = NODES['walk'][~NODES['walk'].index.duplicated(keep='first')];
-    NODES['ondemand'] = NODES['ondemand'][~NODES['ondemand'].index.duplicated(keep='first')];
+    NODES['gtfs'] = NODES['gtfs'].set_index('gtfs2')
+
+    # NODES['transit'] = NODES['transit'][~NODES['transit'].index.duplicated(keep='first')];
+    # NODES['drive'] = NODES['drive'][~NODES['drive'].index.duplicated(keep='first')];
+    # NODES['walk'] = NODES['walk'][~NODES['walk'].index.duplicated(keep='first')];
+    # NODES['ondemand'] = NODES['ondemand'][~NODES['ondemand'].index.duplicated(keep='first')];
+    # NODES['gtfs'] = NODES['gtfs'][~NODES['gtfs'].index.duplicated(keep='first')];
+
+    NODES['transit'] = drop_duplicates(NODES['transit']); #[~NODES['transit'].index.duplicated(keep='first')];
+    NODES['drive'] = drop_duplicates(NODES['drive']); #[~NODES['drive'].index.duplicated(keep='first')];
+    NODES['walk'] = drop_duplicates(NODES['walk']); #[~NODES['walk'].index.duplicated(keep='first')];
+    NODES['ondemand'] = drop_duplicates(NODES['ondemand']); #[~NODES['ondemand'].index.duplicated(keep='first')];
+    NODES['gtfs'] = drop_duplicates(NODES['gtfs']); #[~NODES['gtfs'].index.duplicated(keep='first')];
+
 
 #     NODES['transit'] = NODES['transit'].drop_duplicates(keep='first');
 #     NODES['drive'] = NODES['drive'].drop_duplicates(keep='first');
@@ -189,6 +365,299 @@ def updateNodesDF(NODES):
 #     return NODES
 
 
+######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR 
+######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR 
+######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR 
+######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR 
+######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR 
+######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR 
+######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR 
+######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR ######## RAPTOR 
+
+
+# the following functions implement the RAPTOR algorithm to compute shortest paths using GTFS feeds... 
+
+def get_trip_ids_for_stop(feed, stop_id, departure_time,max_wait=100000*60):
+    """Takes a stop and departure time and get associated trip ids.
+    max_wait: maximum time (in seconds) that passenger can wait at a bus stop.
+    --> actually important to keep the algorithm from considering too many trips.  
+
+    """
+    mask_1 = feed.stop_times.stop_id == stop_id 
+    mask_2 = feed.stop_times.departure_time >= departure_time # departure time is after arrival to stop
+    mask_3 = feed.stop_times.departure_time <= departure_time + max_wait # deparature time is before end of waiting period.
+    potential_trips = feed.stop_times[mask_1 & mask_2 & mask_3].trip_id.unique().tolist() # extract the list of qualifying trip ids
+    return potential_trips
+
+
+def get_trip_profile(feed, stop1_ids,stop2_ids,stop1_times,stop2_times):
+    for i,stop1 in enumerate(stop1_ids):
+        stop2 = stop2_ids[i];
+        time1 = stop1_times[i];
+        time2 = stop2_times[i];
+        stop1_mask = feed.stop_times.stop_id == stop1
+        stop2_mask = feed.stop_times.stop_id == stop2
+        time1_mask = feed.stop_times.departure_time == time1
+        time2_mask = feed.stop_times.arrival_time == time2
+    potential_trips = feed.stop_times[stop1_mask & stop2_mask & time1_mask & time2_mask]
+
+
+
+def stop_times_for_kth_trip(params): 
+    # max_wait in minutes...
+    # prevent upstream mutation of dictionary 
+
+    # IMPORTING PARAMETERS & ASSIGNING DEFAULTS....
+    feed = params['feed'];
+    prev_trips_list = params['prev_trips'].copy();
+    prev_stops_list = params['prev_stops'].copy();
+    from_stop_id = params['from_stop_id'];
+    stop_ids = list(params['stop_ids']);
+    time_to_stops = params['time_to_stops'].copy();  # time to reach each stop with k-1 trips...
+
+    # number of stops to jump by.... if 1 checks every stop; useful hack for speeding up algorithm
+    if not('stop_skip_num' in params):
+        stop_skip_num = 1;
+    else: 
+        stop_skip_num = params['stop_skip_num'];
+    # maximum time to wait at each 
+    if not('max_wait' in params):
+        max_wait = 15*60;
+    else: 
+        max_wait = params['max_wait'];
+    departure_secs = params['departure_secs']
+    
+#   print('NUM OF STOP IDS: ',len(stop_ids))
+    for i, ref_stop_id in enumerate(stop_ids):
+        # how long it took to get to the stop so far (0 for start node)
+        baseline_cost = time_to_stops[ref_stop_id]
+        # get list of all trips associated with this stop
+        potential_trips = get_trip_ids_for_stop(feed, ref_stop_id, departure_secs+time_to_stops[ref_stop_id],max_wait)
+#         print('num potential trips: ',len(potential_trips))
+        for potential_trip in potential_trips:
+            # get all the stop time arrivals for that trip
+            stop_times_sub = feed.stop_times[feed.stop_times.trip_id == potential_trip]
+            stop_times_sub = stop_times_sub.sort_values(by="stop_sequence")
+            # get the "hop on" point
+            from_here_subset = stop_times_sub[stop_times_sub.stop_id == ref_stop_id]
+            from_here = from_here_subset.head(1).squeeze()
+            # get all following stops
+            stop_times_after_mask = stop_times_sub.stop_sequence >= from_here.stop_sequence
+            stop_times_after = stop_times_sub[stop_times_after_mask]
+            stop_times_after = stop_times_after[::stop_skip_num]
+            # for all following stops, calculate time to reach
+            arrivals_zip = zip(stop_times_after.arrival_time, stop_times_after.stop_id)        
+            # for arrive_time, arrive_stop_id in enumerate(list(arrivals_zip)):            
+            for i,out in enumerate(list(arrivals_zip)):
+                arrive_time = out[0]
+                arrive_stop_id = out[1];
+                # time to reach is diff from start time to arrival (plus any baseline cost)
+                arrive_time_adjusted = arrive_time - departure_secs + baseline_cost
+                # only update if does not exist yet or is faster
+                if arrive_stop_id in time_to_stops:
+                    if time_to_stops[arrive_stop_id] > arrive_time_adjusted:
+                        time_to_stops[arrive_stop_id] = arrive_time_adjusted
+                        prev_stops_list[arrive_stop_id] = ref_stop_id
+                        prev_trips_list[arrive_stop_id] = potential_trip
+                        
+                else:
+                    time_to_stops[arrive_stop_id] = arrive_time_adjusted
+                    prev_stops_list[arrive_stop_id] = ref_stop_id
+                    prev_trips_list[arrive_stop_id] = potential_trip                    
+                    
+                    
+    return time_to_stops,prev_stops_list,prev_trips_list;#,stop_times_after.stop_id #,departure_times,arrival_times
+
+def compute_footpath_transfers(stop_ids,time_to_stops_inputs,stops_gdf,transfer_cost,FOOT_TRANSFERS):
+    # stops_ids = params['stop_ids'];
+    # time_to_stops_inputs = params['time_to_stops_inputs'];
+    # stops_gdf = params['stops_gdf'];
+    # transfer_cost = params['transfer_cost'];
+    # FOOT_TRANSFERS = params['FOOT_TRANSFERS'];
+    
+    # prevent upstream mutation of dictionary
+
+
+    time_to_stops = time_to_stops_inputs.copy()
+    stop_ids = list(stop_ids)
+    # add in transfers to nearby stops
+    for stop_id in stop_ids:
+        foot_transfers = FOOT_TRANSFERS[stop_id]
+        for k, arrive_stop_id in enumerate(foot_transfers):
+            arrive_time_adjusted = time_to_stops[stop_id] + foot_transfers[arrive_stop_id];            
+            if arrive_stop_id in time_to_stops:
+                if time_to_stops[arrive_stop_id] > arrive_time_adjusted:
+                    time_to_stops[arrive_stop_id] = arrive_time_adjusted
+            else:
+                time_to_stops[arrive_stop_id] = arrive_time_adjusted
+    return time_to_stops
+
+
+
+
+
+
+# params = {};         
+# params = {from_stops: from_bus_stops, max_wait: max_wait }
+
+def raptor_shortest_path(params):
+    feed = params['feed']
+    from_stop_ids = params['from_stops'].copy();
+    transfer_limit = params['transfer_limit']
+    max_wait = params['max_wait'];
+    add_footpath_transfers = params['add_footpath_transfers']
+    gdf = params['gdf'];
+    foot_transfer_cost = params['foot_transfer_cost']    
+    FOOT_TRANSFERS = params['FOOT_TRANSFERS']    
+    stop_skip_num = params['stop_skip_num']
+    departure_secs = params['departure_secs']
+    REACHED_BUS_STOPS = {};
+    TIME_TO_STOPS = {};
+    PREV_NODES = {};    
+    PREV_TRIPS = {};        
+    for i,from_stop_id in enumerate(from_stop_ids):
+        if np.mod(i,1)==0:
+            print('stop number: ',i)
+        REACHED_BUS_STOPS[from_stop_id] = [];
+        PREV_NODES[from_stop_id] = [];        
+        PREV_TRIPS[from_stop_id] = [];                
+        TIME_TO_STOPS[from_stop_id] = 0;
+        init_start_time1 = time.time();
+        
+        
+        time_to_stops = {from_stop_id : 0}
+        list_of_stops = {from_stop_id : from_stop_id}
+        list_of_trips = {from_stop_id : None}
+        #arrrival_times = {from_stop_id:0}
+        
+        #     for j in range(len(types)):
+        #         REACHED_NODES[types[j]][from_stop_id] = [];    
+        for k in range(transfer_limit + 1):
+            start_time = time.time();
+            stop_ids = list(time_to_stops)
+            prev_stops = list_of_stops
+            prev_trips = list_of_trips
+            params2 = {}
+            params2['feed'] = feed;
+            params2['prev_trips'] = prev_trips;
+            params2['prev_stops'] = prev_stops;
+            params2['from_stop_id'] = from_stop_id;
+            params2['stop_ids'] = stop_ids;
+            params2['time_to_stops'] = time_to_stops;
+            params2['stop_skip_num'] = stop_skip_num;
+            params2['max_wait'] = max_wait
+            params2['departure_secs'] = departure_secs;
+            time_to_stops,list_of_stops,list_of_trips = stop_times_for_kth_trip(params2)
+#             if k==2:
+#                 print(time_to_stops)
+#                 asdf
+            if (add_footpath_transfers):
+                time_to_stops = compute_footpath_transfers(stop_ids, time_to_stops, gdf,foot_transfer_cost,FOOT_TRANSFERS)    
+            end_time = time.time();
+    
+            REACHED_BUS_STOPS[from_stop_id].append(time_to_stops);
+            PREV_NODES[from_stop_id].append(list_of_stops);
+            PREV_TRIPS[from_stop_id].append(list_of_trips);
+#             for l in range(len(types)):
+#                 REACHED_NODES[types[l]][from_stop_id].append([]);
+#                 if (l>=1):
+#             for j, bus_stop in enumerate(list(time_to_stops.keys())):
+#                 if bus_stop in list(BUS_STOP_NODES['drive'].keys()):
+#                     REACHED_NODES['drive'][from_stop_id][k].append(BUS_STOP_NODES['drive'][bus_stop]);
+                
+        TIME_TO_STOPS[from_stop_id] = time_to_stops.copy();
+
+        
+    return TIME_TO_STOPS,REACHED_BUS_STOPS,PREV_NODES,PREV_TRIPS;
+
+
+def get_trip_lists(feed,orig,dest,stop_plan,trip_plan):    
+    stop_chain = [];
+    trip_chain = [];
+    prev_stop = dest;
+    for i,stop_leg in enumerate(stop_plan[::-1]):
+        trip_leg = trip_plan[-i]
+        if not(prev_stop in stop_leg):
+            continue
+        else:
+            prev_stop2 = stop_leg[prev_stop]
+            if not(prev_stop2 == prev_stop):
+                stop_chain.append(prev_stop)
+                trip_chain.append(trip_leg[prev_stop])                
+            prev_stop = prev_stop2
+    stop_chain = stop_chain[::-1];
+    stop_chain.insert(0,orig)
+    trip_chain = trip_chain[::-1];
+    return stop_chain,trip_chain
+
+
+##########################################################################################
+##########################################################################################
+##########################################################################################
+##########################################################################################
+
+
+def create_chains(stop1,stop2,PREV_NODES,PREV_TRIPS,max_trans = 4):
+    STOP_LIST = [stop2];
+    TRIP_LIST = [];
+    for i in range(max_trans):
+        stop = STOP_LIST[-(i+1)]
+        stop2 = PREV_NODES[stop1][-(i+1)][stop]    
+        trip = PREV_TRIPS[stop1][-(i+1)][stop]
+        STOP_LIST.insert(0,stop2);
+        TRIP_LIST.insert(0,trip);        
+    return STOP_LIST, TRIP_LIST
+
+def list_inbetween_stops(feed,STOP_LIST,TRIP_LIST):
+    stopList = [];
+    edgeList = []; 
+    segs = [];
+    prev_node = STOP_LIST[0];
+    for i,trip in enumerate(TRIP_LIST):
+        if not(trip==None):
+            stop1 = STOP_LIST[i];
+            stop2 = STOP_LIST[i+1];    
+            stops = [];
+            df = feed.stop_times[feed.stop_times['trip_id']==trip]
+            seq1 = list(df[df['stop_id'] == stop1]['stop_sequence'])[0]
+            seq2 = list(df[df['stop_id'] == stop2]['stop_sequence'])[0]
+            mask1 = df['stop_sequence'] >= seq1;
+            mask2 = df['stop_sequence'] <= seq2;
+            df = df[mask1 & mask2]
+            df = df.sort_values(by=['stop_sequence'])
+            seg = list(df['stop_id'])
+            segs.append(seg)
+            
+            for j,node in enumerate(seg):
+                if j<(len(seg)-1):
+                    stopList.append(node)
+                    edgeList.append((prev_node,node,0))
+                    prev_node = node
+    return segs,stopList,edgeList[1:]
+
+
+def gtfs_to_transit_nodesNedges(stopList,NODES):
+    nodeList = [];
+    edgeList = [None];
+    prev_node = None;
+    for i,stop in enumerate(stopList):
+        new_node = convertNode(stop,'gtfs','transit',NODES)
+        nodeList.append(new_node)
+        edgeList.append((prev_node,new_node,0))
+    edgeList = edgeList[1:]
+    return nodeList,edgeList
+
+##############################################################################################################
+##############################################################################################################
+##############################################################################################################
+##############################################################################################################    
+
+
+
+##### ---------- END OF RAPTOR --------- ##### ---------- END OF RAPTOR --------- ##### ---------- END OF RAPTOR --------- 
+##### ---------- END OF RAPTOR --------- ##### ---------- END OF RAPTOR --------- ##### ---------- END OF RAPTOR --------- 
+##### ---------- END OF RAPTOR --------- ##### ---------- END OF RAPTOR --------- ##### ---------- END OF RAPTOR --------- 
+##### ---------- END OF RAPTOR --------- ##### ---------- END OF RAPTOR --------- ##### ---------- END OF RAPTOR --------- 
 
 
 
@@ -255,13 +724,11 @@ def bus_connection_nodes(graph,node,bus_stop_nodes,eps=10):
             continue
     return connection_nodes,ordering #,all_bus_stops
 
-recompute_close_nodes = True;    
+recompute_close_nodes = True;
 recompute_close_nodes = True;
 recompute_connection_nodes = True;
 recompute_foot_transfers = True;
 
-  
-  
 def makeTrip(modes,nodes,node_types,NODES,deliveries = []):
     trip = {};
     segs = [];
@@ -292,9 +759,21 @@ def makeTrip(modes,nodes,node_types,NODES,deliveries = []):
     trip['current']['traj'] = []; 
     return trip
 
+def nearest_nodes(mode,GRAPHS,NODES,x,y):
+    if mode == 'gtfs':
+        node = ox.distance.nearest_nodes(GRAPHS['transit'], x,y);
+        out = convertNode(node,'transit','gtfs',NODES)
+        # print(out)
+    else:
+        out = ox.distance.nearest_nodes(GRAPHS[mode], x,y);
+
+    return out
+
 def makeTrip2(modes,nodes,NODES,deliveries=[]): #,node_types,NODES,deliveries = []):
+    
     trip = {};
     segs = [];
+
     deliv_counter = 0;
     for i,mode in enumerate(modes):
         segs.append({});
@@ -377,7 +856,10 @@ def querySeg(start,end,mode,PERSON,NODES,GRAPHS,WORLD):
     """
     cost = 0;
     if not((start,end) in WORLD[mode]['trips'].keys()):  
-        planSeg(start,end,mode,GRAPHS,WORLD,mass=0);
+        if mode == 'gtfs':
+            planGTFSSeg(start,end,mode,GRAPHS,WORLD,NODES,mass=0);
+        else:
+            planDijkstraSeg(start,end,mode,GRAPHS,WORLD,mass=0);
     # print(PERSON['prefs'].keys())
     for l,factor in enumerate(PERSON['prefs'][mode]):
         cost = WORLD[mode]['trips'][(start,end)]['costs']['current_'+factor] # possibly change for delivery
@@ -386,7 +868,7 @@ def querySeg(start,end,mode,PERSON,NODES,GRAPHS,WORLD):
     path = WORLD[mode]['trips'][(start,end)]['current_path']
     return cost,path
 
-def planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=False):
+def planDijkstraSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=False):
     trip = (source,target);
     GRAPH = GRAPHS[mode];
     # if mode == 'transit' and mass > 0:
@@ -397,7 +879,7 @@ def planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=False):
         path = temp[1]; 
     except: 
         #print('no path found for bus trip ',trip,'...')
-        distance = 1000000;
+        distance = 10000000;
         path = [];
 
     if not(trip in WORLD[mode]['trips'].keys()):
@@ -431,6 +913,77 @@ def planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=False):
                 WORLD[mode]['edge_costs'][edge][-1] = edge_cost;
                 WORLD[mode]['current_edge_costs'][edge] = edge_cost;    
                 WORLD[mode]['current_edge_masses'][edge] = edge_mass;
+
+
+
+
+
+
+def planGTFSSeg(source,target,mode,GRAPHS,WORLD,NODES,mass=1,track=False,verbose=False):
+    trip = (source,target);
+    FEED = GRAPHS['gtfs']
+    GRAPH = GRAPHS['transit'];
+
+    PRECOMPUTE = WORLD['gtfs']['precompute']
+    REACHED = PRECOMPUTE['reached']
+    PREV_NODES = PRECOMPUTE['prev_nodes'];
+    PREV_TRIPS = PRECOMPUTE['prev_trips'];
+
+    try:
+        stop_list,trip_list = create_chains(source,target,PREV_NODES,PREV_TRIPS);
+
+        _,stopList,edgeList = list_inbetween_stops(FEED,stop_list,trip_list);
+
+        # print(stopList)
+        # print('')
+        path,_ = gtfs_to_transit_nodesNedges(stopList,NODES)
+        distance = REACHED[source][-1][target]
+    except: 
+        #print('no path found for bus trip ',trip,'...')
+        distance = 10000000;
+        path = [];
+
+    if not(trip in WORLD[mode]['trips'].keys()):
+        WORLD[mode]['trips'][trip] = {};
+        WORLD[mode]['trips'][trip]['costs'] = {'time':[],'money':[],'conven':[],'switches':[]}
+        #WORLD[mode]['trips'][trip]['costs'] = {'current_time':[],'current_money':[],'current_conven':[],'current_switches':[]}
+        WORLD[mode]['trips'][trip]['path'] = [];
+        WORLD[mode]['trips'][trip]['mass'] = 0;
+
+    WORLD[mode]['trips'][trip]['costs']['current_time'] = distance
+    WORLD[mode]['trips'][trip]['costs']['current_money'] = 1;
+    WORLD[mode]['trips'][trip]['costs']['current_conven'] = 1; 
+    WORLD[mode]['trips'][trip]['costs']['current_switches'] = 1; 
+    WORLD[mode]['trips'][trip]['current_path'] = path;
+    WORLD[mode]['trips'][trip]['mass'] = 0;
+    
+    if track==True:
+        WORLD[mode]['trips'][trip]['costs']['time'].append(distance)
+        WORLD[mode]['trips'][trip]['costs']['money'].append(1)
+        WORLD[mode]['trips'][trip]['costs']['conven'].append(1)
+        WORLD[mode]['trips'][trip]['costs']['switches'].append(1)
+        WORLD[mode]['trips'][trip]['path'].append(path);
+
+    num_missing_edges = 0;
+    if mass > 0:
+        #print(path)
+        for j,node in enumerate(path):
+            if j < len(path)-1:
+                edge = (path[j],path[j+1],0)
+                if edge in WORLD[mode]['edge_masses']:
+                    edge_mass = WORLD[mode]['edge_masses'][edge][-1] + mass;
+                    edge_cost = 1.*edge_mass + 1.;
+                    WORLD[mode]['edge_masses'][edge][-1] = edge_mass;
+                    WORLD[mode]['edge_costs'][edge][-1] = edge_cost;
+                    WORLD[mode]['current_edge_costs'][edge] = edge_cost;    
+                    WORLD[mode]['current_edge_masses'][edge] = edge_mass;
+                else:
+                    num_missing_edges = num_missing_edges + 1
+                    # if np.mod(num_missing_edges,10)==0:
+                    #     print(num_missing_edges,'th missing edge...')
+    if verbose:
+        if num_missing_edges > 1:
+            print('# edges missing in gtfs segment...',num_missing_edges)
 
 
 
@@ -624,6 +1177,8 @@ def update_choices2(PEOPLE, DELIVERY, NODES, GRAPHS, WORLD, version=1,verbose=Fa
         
     people_chose = {};
     for i,person in enumerate(PEOPLE):
+        if np.mod(i,50)==0:
+            print(person,'...')
         PERSON = PEOPLE[person];
         
         delivery_grp = PERSON['delivery_grp'];        
@@ -663,9 +1218,21 @@ def update_choices2(PEOPLE, DELIVERY, NODES, GRAPHS, WORLD, version=1,verbose=Fa
                 end = SEG['opt_end']
                 #print(WORLD[mode]['trips'][(start,end)])
                 #if not(mode in ['transit']):
-                WORLD[mode]['trips'][(start,end)]['mass'] = WORLD[mode]['trips'][(start,end)]['mass'] + PERSON['mass'];
-                WORLD[mode]['trips'][(start,end)]['active'] = True; 
-                WORLD[mode]['active_trips'].append((start,end));
+
+                # print(mode)
+                # print((start,end))
+                # if mode=='transit':
+                #     print(WORLD[mode]['trips'])
+                # try: 
+                if (start,end) in WORLD[mode]['trips']:
+                    WORLD[mode]['trips'][(start,end)]['mass'] = WORLD[mode]['trips'][(start,end)]['mass'] + PERSON['mass'];
+                    WORLD[mode]['trips'][(start,end)]['active'] = True; 
+                    WORLD[mode]['active_trips'].append((start,end));
+                else:
+                    continue#print('missing segment...')
+                # except:
+                #     print('balked...')
+                #     continue
 
     
 
@@ -723,81 +1290,95 @@ def world_of_transit_graph(WORLD,PEOPLE,GRAPHS,verbose=False):
     mode = 'transit'
     removeMassFromEdges(mode,WORLD,GRAPHS) 
     segs = WORLD[mode]['active_trips']
+    print('...with ',len(segs),' active trips...')        
     for i,seg in enumerate(segs):
         source = seg[0];
         target = seg[1];
         trip = (source,target)
-        planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=True);
+        planDijkstraSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=True);
         WORLD[mode]['trips'][trip]['active'] = False;    
     WORLD[mode]['active_trips']  = [];
 
-    # source_tags = ['transit_walk1',
-    #                'transit_drive1',
-    #                'transit_ondemand1',
-    #                'transit_walk1',
-    #                'transit_drive1',
-    #                'transit_ondemand1',
-    #                'transit_walk1',
-    #                'transit_drive1',
-    #                'transit_ondemand1']
+
+def world_of_gtfs(WORLD,PEOPLE,GRAPHS,NODES,verbose=False):
+    if verbose: print('starting gtfs computations...')
+    #raptor_gtfs
+    GTFS = WORLD['gtfs'];
+    GRAPH =GRAPHS['transit']; 
+    FEED = GRAPHS['gtfs'];
+    if not('edge_masses_gtfs' in GTFS.keys()):
+        GTFS['edge_masses'] = {};
+        GTFS['edge_costs'] = {};
+        GTFS['current_edge_costs'] = {};
+        GTFS['edge_a0'] = {};
+        GTFS['edge_a1'] = {};        
+        for e,edge in enumerate(GRAPH.edges):
+            GTFS['edge_masses'][edge] = [0]
+            GTFS['edge_costs'][edge] = [1]
+            GTFS['current_edge_costs'][edge] = 1;
+            GTFS['edge_a0'][edge] = 1;
+            GTFS['edge_a1'][edge] = 1;               
+        
+    if 'current_edge_costs' in GTFS.keys():
+        current_costs = GTFS['current_edge_costs'];
+    else: 
+        current_costs = {k:v for k,v in zip(GRAPH.edges,np.ones(len(GRAPH.edges)))}
+        
+    #nx.set_edge_attributes(GRAPH,current_costs,'c');
+
+    mode = 'gtfs'
+    #removeMassFromEdges(mode,WORLD,GRAPHS) 
+    segs = WORLD[mode]['active_trips']
+    print('...with ',len(segs),' active trips...')        
+    for i,seg in enumerate(segs):
+        source = seg[0];
+        target = seg[1];
+        trip = (source,target)
+        planGTFSSeg(source,target,mode,GRAPHS,WORLD,NODES,mass=1,track=True);
+        WORLD[mode]['trips'][trip]['active'] = False;    
+    WORLD[mode]['active_trips']  = [];
+
+
+def world_of_transit(WORLD,PEOPLE,GRAPHS,verbose=False):
+    # uses GTFS feed
+    if verbose: print('starting transit computations...')
+    #raptor_gtfs
+    TRANSIT = WORLD['transit'];
+    GRAPH = GRAPHS[TRANSIT['graph']];
+
+    ########################################################################################
+    #### --- NOT SURE WE NEED THIS>>>> 
+    if not('edge_masses' in TRANSIT.keys()):
+        TRANSIT['edge_masses'] = {};
+        TRANSIT['edge_costs'] = {};
+        TRANSIT['current_edge_costs'] = {};
+        TRANSIT['edge_a0'] = {};
+        TRANSIT['edge_a1'] = {};        
+        for e,edge in enumerate(GRAPH.edges):
+            TRANSIT['edge_masses'][edge] = [0]
+            TRANSIT['edge_costs'][edge] = [1]
+            TRANSIT['current_edge_costs'][edge] = 1;
+            TRANSIT['edge_a0'][edge] = 1;
+            TRANSIT['edge_a1'][edge] = 1;               
+
+    if 'current_edge_costs' in TRANSIT.keys():
+        current_costs = TRANSIT['current_edge_costs'];
+    else: 
+        current_costs = {k:v for k,v in zip(GRAPH.edges,np.ones(len(GRAPH.edges)))}        
+    nx.set_edge_attributes(GRAPH,current_costs,'c');
+    ########################################################################################
     
-    # target_tags = ['transit_walk2',
-    #                'transit_walk2',
-    #                'transit_walk2',
-    #                'transit_drive2',
-    #                'transit_drive2',
-    #                'transit_drive2',
-    #                'transit_ondemand2',
-    #                'transit_ondemand2',
-    #                'transit_ondemand2']
-    
 
-    # removeMassFromEdges('transit',WORLD,GRAPHS)
-    
-    # for i,person in enumerate(WORLD['transit']['people']):
-    #     for j,source_tag in enumerate(source_tags):
-    #         target_tag = target_tags[j];
-    #         PERSON = PEOPLE[person];
-    #         source = PERSON['nodes'][source_tag]['transit'];
-    #         target = PERSON['nodes'][target_tag]['transit'];
-    #         #temp = nx.multi_source_dijkstra(GRAPH, sources, target=target, weight='c'); #
-    #         #temp = nx.single_target_shortest_path(GRAPH,people_nodes[0])
-    #         trip = (source,target);
-    #         mass = 1;        
-    #         try:
-    #             temp = nx.multi_source_dijkstra(GRAPH, [source], target=target, weight='c');
-    #             distance = temp[0];
-    #             path = temp[1]; 
-    #         except: 
-    #             #print('no path found for bus trip ',trip,'...')
-    #             distance = 1000000;
-    #             path = [];
-
-    #         if not(trip in WORLD['transit']['trips'].keys()):
-    #             TRANSIT['trips'][trip] = {};
-    #             TRANSIT['trips'][trip]['costs'] = {'time':[],'money':[],'conven':[],'switches':[]}
-    #             TRANSIT['trips'][trip]['path'] = [];
-    #             TRANSIT['trips'][trip]['mass'] = 0;
-
-    #         TRANSIT['trips'][trip]['costs']['time'].append(distance)
-    #         TRANSIT['trips'][trip]['costs']['money'].append(1)
-    #         TRANSIT['trips'][trip]['costs']['conven'].append(1)
-    #         TRANSIT['trips'][trip]['costs']['switches'].append(1)
-    #         TRANSIT['trips'][trip]['path'].append(path);
-
-    #         # if True: #PERSON['current_choice'] in seg_types[tt]:
-    #         #     for j,node in enumerate(path):
-    #         #         if j < len(path)-1:
-    #         #             edge = (path[j],path[j+1],0)
-    #         #             edge_mass = TRANSIT['edge_masses'][edge][-1] + mass;
-    #         #             edge_cost = 1.*edge_mass + 1.;
-    #         #             TRANSIT['edge_masses'][edge][-1] = edge_mass;
-    #         #             TRANSIT['edge_costs'][edge][-1] = edge_cost;
-    #         #             TRANSIT['current_edge_costs'][edge] = edge_cost;    
-    #         #             TRANSIT['current_edge_masses'][edge] = edge_mass;    
-    #         TRANSIT['trips'][trip]['active'] = False;
-
-
+    mode = 'transit'
+    removeMassFromEdges(mode,WORLD,GRAPHS) 
+    segs = WORLD[mode]['active_trips']
+    for i,seg in enumerate(segs):
+        source = seg[0];
+        target = seg[1];
+        trip = (source,target)
+        planDijkstraSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=True);
+        WORLD[mode]['trips'][trip]['active'] = False;    
+    WORLD[mode]['active_trips']  = [];    
 
 
 def createBasicNetwork():
@@ -962,39 +1543,61 @@ def world_of_ondemand(WORLD,PEOPLE,DELIVERY,GRAPHS,verbose=False):
 
 def divideDelivSegs(trips,DELIVERY,GRAPHS,WORLD,maxTrips = 1000):
     GRAPH = GRAPHS['ondemand'];
+    deliverys_unsorted = list(DELIVERY.keys());
+
     for i,trip in enumerate(trips):
         start = trip[0];
         xloc = GRAPH.nodes[start]['x']
         yloc = GRAPH.nodes[start]['y']
         end = trip[1];
         #max_dist = 100000000000;
-        dists = [100000000000000];
-        delivs = [None];
-        current_deliv = None;
+        # dists = [100000000000000];
+        # delivs = [None];
+        # current_deliv = None;
+        dists = [];
         for j,deliv in enumerate(DELIVERY):
             DELIV = DELIVERY[deliv];
             loc0 = DELIV['loc'];
             dist = np.sqrt((xloc-loc0[0])*(xloc-loc0[0])+(yloc-loc0[1])*(yloc-loc0[1]));
+            dists.append(dist);
+        dists = np.array(dists);
 
-            ind = 0; spot_found = False;
-            for ll in range(len(dists)):
-                if dist < dists[ll]:
-                    dists.insert(ll,dist);
-                    delivs.insert(ll,deliv);
-            # if dist < max_dist:
-            #     current_deliv = deliv;
-            #     max_dist = dist;
-        dists = dists[:-1]
-        delivs = delivs[:-1]
-        for j,deliv in enumerate(delivs):
+        inds = np.argsort(dists).astype(int)
+        delivs = [deliverys_unsorted[ind] for i,ind in enumerate(inds)]
+        dists = dists[inds];
+        j = 0; spot_found = False;
+        while (j<(len(delivs)-1)) & (spot_found==False):
+            deliv = delivs[j];
             DELIV = DELIVERY[deliv];
             if len(DELIV['active_trips'])<maxTrips:
                 DELIV['active_trips'].append(trip)
+                spot_found = True;
+            j = j+1;
+
+
+        #     print(len(dists))
+        #     for ll in range(len(dists)):
+        #         if dist < dists[ll] :
+        #             dists.insert(ll,dist);
+        #             delivs.insert(ll,deliv);
+        #     # if dist < max_dist:
+        #     #     current_deliv = deliv;
+        #     #     max_dist = dist;
+        # dists = dists[:-1]
+        # delivs = delivs[:-1]
+        # # print(len(delivs))
+        # for j,deliv in enumerate(delivs):
+        #     DELIV = DELIVERY[deliv];
+        #     if len(DELIV['active_trips'])<maxTrips:
+        #         DELIV['active_trips'].append(trip)
+
+
 
 def planDelivSegs(sources,targets,start,DELIV,GRAPHS,WORLD,maxSegs=100,track=False):
     GRAPH = GRAPHS['ondemand']
-    maxind = np.min([len(sources),len(targets),maxSegs]);
 
+
+    maxind = np.min([len(sources),len(targets),maxSegs]);
 
     pickups= order_pickups2(GRAPH,sources[:maxind],targets[:maxind],start);
     plan = traveling_salesman(GRAPH,pickups[:-1],pickups[-1]);
@@ -1027,9 +1630,9 @@ def planDelivSegs(sources,targets,start,DELIV,GRAPHS,WORLD,maxSegs=100,track=Fal
             WORLD[mode]['trips'][trip]['path'].append(path);
 
 
-
-def world_of_ondemand2(WORLD,PEOPLE,DELIVERY,GRAPHS,verbose=False):    
+def world_of_ondemand2(WORLD,PEOPLE,DELIVERY,GRAPHS,verbose=False,show_delivs='all'):
     if verbose: print('starting on-demand computations...')    
+
     #### PREV: tsp_wgrps
     #lam = grads['lam']
     #pickups = current_pickups(lam,all_pickup_nodes) ####
@@ -1041,6 +1644,11 @@ def world_of_ondemand2(WORLD,PEOPLE,DELIVERY,GRAPHS,verbose=False):
     DELIVERY0 = DELIVERY['direct'];
     maxTrips = len(trips_to_plan)/len(list(DELIVERY0.keys()));
     divideDelivSegs(trips_to_plan,DELIVERY0,GRAPHS,WORLD,maxTrips);
+
+    if show_delivs=='all': delivs_to_show = list(range(len(list(DELIVERY0.keys()))));
+    elif isinstance(show_delivs,int): delivs_to_show = list(range(show_delivs));
+    else: delivs_to_show = show_delivs;
+
     for i,delivery in enumerate(DELIVERY0):
         DELIV = DELIVERY0[delivery];
         active_trips = DELIV['active_trips'];
@@ -1049,12 +1657,14 @@ def world_of_ondemand2(WORLD,PEOPLE,DELIVERY,GRAPHS,verbose=False):
         [sources.append(trip[0]) for _,trip in enumerate(active_trips)]
         [targets.append(trip[1]) for _,trip in enumerate(active_trips)]
         planDelivSegs(sources,targets,start,DELIV,GRAPHS,WORLD,track=False);
-        path = DELIV['current_path'];          
-        for j,node in enumerate(path):
-            if j < len(path)-1:
-                edge = (path[j],path[j+1],0)
-                edge_mass = 1; #ONDEMAND['edge_masses'][edge][-1] + mass;
-                ONDEMAND['current_edge_masses'][edge] = edge_mass;
+        path = DELIV['current_path'];
+        if i in delivs_to_show:
+            for j,node in enumerate(path):
+                if j < len(path)-1:
+                    edge = (path[j],path[j+1],0)
+                    edge_mass = 1; #ONDEMAND['edge_masses'][edge][-1] + mass;
+                    ONDEMAND['current_edge_masses'][edge] = edge_mass;
+                    ONDEMAND['current_edge_masses1'][edge] = edge_mass;
             
 
 
@@ -1063,6 +1673,12 @@ def world_of_ondemand2(WORLD,PEOPLE,DELIVERY,GRAPHS,verbose=False):
     DELIVERY0 = DELIVERY['shuttle'];
     maxTrips = len(trips_to_plan)/len(list(DELIVERY0.keys()));    
     divideDelivSegs(trips_to_plan,DELIVERY0,GRAPHS,WORLD);
+
+    if show_delivs=='all': delivs_to_show = list(range(len(list(DELIVERY0.keys()))));
+    elif isinstance(show_delivs,int): delivs_to_show = list(range(show_delivs));
+    else: delivs_to_show = show_delivs;
+
+
     for i,delivery in enumerate(DELIVERY0):
         DELIV = DELIVERY0[delivery];
         active_trips = DELIV['active_trips'];
@@ -1073,11 +1689,13 @@ def world_of_ondemand2(WORLD,PEOPLE,DELIVERY,GRAPHS,verbose=False):
         planDelivSegs(sources,targets,start,DELIV,GRAPHS,WORLD,track=False);
         DELIV['active_trips']  = [];
         path = DELIV['current_path'];          
-        for j,node in enumerate(path):
-            if j < len(path)-1:
-                edge = (path[j],path[j+1],0)
-                edge_mass = 1; #ONDEMAND['edge_masses'][edge][-1] + mass;
-                ONDEMAND['current_edge_masses'][edge] = edge_mass;        
+        if i in delivs_to_show:        
+            for j,node in enumerate(path):
+                if j < len(path)-1:
+                    edge = (path[j],path[j+1],0)
+                    edge_mass = 1; #ONDEMAND['edge_masses'][edge][-1] + mass;
+                    ONDEMAND['current_edge_masses'][edge] = edge_mass;
+                    ONDEMAND['current_edge_masses2'][edge] = edge_mass;
 
 
 
@@ -1102,10 +1720,10 @@ def world_of_drive(WORLD,PEOPLE,GRAPHS,verbose=False): #graph,costs,sources, tar
         for e,edge in enumerate(GRAPH.edges):
             DRIVE['edge_masses'][edge] = [0]
             DRIVE['edge_costs'][edge] = [1]
-            DRIVE['current_edge_costs'][edge] = 1;
+            DRIVE['current_edge_costs'][edge] = GRAPH.edges[edge]['cost_fx'][0];
             DRIVE['edge_a0'][edge] = 1;
-            DRIVE['edge_a1'][edge] = 1;               
-    else: 
+            DRIVE['edge_a1'][edge] = 1;
+    else:
         for e,edge in enumerate(GRAPH.edges):
             DRIVE['edge_masses'][edge].append(0)
             DRIVE['edge_costs'][edge].append(0)
@@ -1115,18 +1733,20 @@ def world_of_drive(WORLD,PEOPLE,GRAPHS,verbose=False): #graph,costs,sources, tar
         current_costs = DRIVE['current_edge_costs'];
     else: 
         current_costs = {k:v for k,v in zip(GRAPH.edges,np.ones(len(GRAPH.edges)))}
+
+
         
     nx.set_edge_attributes(GRAPH,current_costs,'c');
-    
 
     mode = 'drive'
     removeMassFromEdges(mode,WORLD,GRAPHS)
-    segs = WORLD[mode]['active_trips']    
+    segs = WORLD[mode]['active_trips']
+    print('...with ',len(segs),' active trips...')    
     for i,seg in enumerate(segs):
         source = seg[0];
         target = seg[1];
         trip = (source,target)
-        planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=True);
+        planDijkstraSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=True);
         WORLD[mode]['trips'][trip]['active'] = False;    
     WORLD[mode]['active_trips']  = [];
 
@@ -1148,7 +1768,7 @@ def world_of_walk(WORLD,PEOPLE,GRAPHS,verbose=False): #graph,costs,sources, targ
         for e,edge in enumerate(GRAPH.edges):
             WALK['edge_masses'][edge] = [0]
             WALK['edge_costs'][edge] = [1]
-            WALK['current_edge_costs'][edge] = 1;
+            WALK['current_edge_costs'][edge] = GRAPH.edges[edge]['cost_fx'][0];
             WALK['edge_a0'][edge] = 1;
             WALK['edge_a1'][edge] = 1;               
 
@@ -1163,20 +1783,46 @@ def world_of_walk(WORLD,PEOPLE,GRAPHS,verbose=False): #graph,costs,sources, targ
         current_costs = WALK['current_edge_costs'];
     else: 
         current_costs = {k:v for k,v in zip(GRAPH.edges,np.ones(len(GRAPH.edges)))}
-    nx.set_edge_attributes(GRAPH,current_costs,'c');     
-    
 
+
+    nx.set_edge_attributes(GRAPH,current_costs,'c');     
 
     mode = 'walk'
     removeMassFromEdges(mode,WORLD,GRAPHS)  
     segs = WORLD[mode]['active_trips']
+    print('...with ',len(segs),' active trips...')        
     for i,seg in enumerate(segs):
         source = seg[0];
         target = seg[1];
         trip = (source,target)
-        planSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=True);
+        planDijkstraSeg(source,target,mode,GRAPHS,WORLD,mass=1,track=True);
         WORLD[mode]['trips'][trip]['active'] = False;    
     WORLD[mode]['active_trips']  = [];
+
+def createEdgeCosts(mode,GRAPHS):
+
+    if (mode == 'drive') or (mode == 'ondemand'):
+        # keys '25 mph'
+        GRAPH = GRAPHS[mode];
+        for i,edge in enumerate(GRAPH.edges):
+            EDGE = GRAPH.edges[edge];
+            #maxspeed = EDGE['maxspeed'];
+            maxspeed = 45; # in mph
+            length = EDGE['length'] ; # assumed in meters? 1 mph = 0.447 m/s
+            time_to_travel = length/(maxspeed * 0.447)
+            EDGE['cost_fx'] = [time_to_travel];
+
+    if (mode == 'walk'):
+        # keys '25 mph'
+        GRAPH = GRAPHS[mode];
+        for i,edge in enumerate(GRAPH.edges):
+            EDGE = GRAPH.edges[edge];
+            #maxspeed = EDGE['maxspeed'];
+            maxspeed = 3.; # in mph
+            length = EDGE['length'] ; # assumed in meters? 1 mph = 0.447 m/s
+            time_to_travel = length/(maxspeed * 0.447)
+            EDGE['cost_fx'] = [time_to_travel];
+
 
 
     # for i,person in enumerate(WALK['people']):
@@ -1735,6 +2381,225 @@ def tsp_dual(grads):
 #             for j,factor in enumerate(PERSON['factors']):
 #                 PERSON['costs'][opt][factor] = WORLD[opt][node][factor]['cost'];
     
+
+######## OLD PEOPLE LOOPS....
+    # ##### VERSION2 ##### VERSION2 ##### VERSION2 ##### VERSION2 ##### VERSION2 ##### VERSION2 
+    # ##### VERSION2 ##### VERSION2 ##### VERSION2 ##### VERSION2 ##### VERSION2 ##### VERSION2 
+    # ##### VERSION2 ##### VERSION2 ##### VERSION2 ##### VERSION2 ##### VERSION2 ##### VERSION2     
+    # if False:    
+    #     PERSON['choice'] = 'ondemand';
+
+    #     PERSON['nodes'] = {'source': {},
+    #      'transit_walk1': {},
+    #      'transit_walk2': {},
+    #      'transit_ondemand1': {},
+    #      'transit_ondemand2': {},
+    #      'transit_drive1': {},
+    #      'transit_drive2': {},
+    #      'target': {},
+    #     }
+    #     PERSON['locs'] = {'source': {},
+    #      'transit_walk1': {},
+    #      'transit_walk2': {},
+    #      'transit_ondemand1': {},
+    #      'transit_ondemand2': {},
+    #      'transit_drive1': {},
+    #      'transit_drive2': {},
+    #      'target': {},
+    #     }    
+
+
+    #     loc = ORIG_LOC[i];
+    #     typ = 'source';
+    #     graph_tags = ['drive','walk','ondemand']
+    #     for k,tag in enumerate(graph_tags):
+    #         GRAPH = GRAPHS[tag];
+    #         node = ox.distance.nearest_nodes(GRAPH, loc[0],loc[1]);
+    #         PERSON['nodes'][typ][tag] = node;
+    #         x = GRAPHS[tag].nodes[node]['x']
+    #         y = GRAPHS[tag].nodes[node]['y']
+    #         PERSON['locs'][typ][tag] = (x,y);
+    #         node_lists[typ][tag].append(node)
+
+    #     loc = DEST_LOC[i];
+    #     typ = 'target';
+    #     graph_tags = ['drive','walk','ondemand']
+    #     for k,tag in enumerate(graph_tags):
+    #         GRAPH = GRAPHS[tag];
+    #         node = ox.distance.nearest_nodes(GRAPH, loc[0],loc[1]);
+    #         PERSON['nodes'][typ][tag] = node;
+    #         x = GRAPHS[tag].nodes[node]['x']
+    #         y = GRAPHS[tag].nodes[node]['y']
+    #         PERSON['locs'][typ][tag] = (x,y);
+    #         node_lists[typ][tag].append(node)
+
+
+    #     #################################################################
+    #     loc = ORIG_LOC[i];
+    #     typ = 'transit_walk1';    
+    #     graph_tags = ['walk','transit']
+    #     for k,tag in enumerate(graph_tags):
+
+    #         try: 
+    #             GRAPH = GRAPHS[tag];
+    #             node = ox.distance.nearest_nodes(GRAPHS['transit'], loc[0],loc[1]);
+    #             if tag == 'walk':
+    #                 node = BUS_STOP_NODES[tag][node];        
+    #             PERSON['nodes'][typ][tag] = node;
+    #             x = GRAPHS[tag].nodes[node]['x']
+    #             y = GRAPHS[tag].nodes[node]['y']
+    #             PERSON['locs'][typ][tag] = (x,y);
+    #             node_lists[typ][tag].append(node)
+    #         except: 
+    #             PERSON['nodes'][typ][tag] = None
+    #             PERSON['locs'][typ][tag] = None;
+
+
+
+    #     loc = DEST_LOC[i];
+    #     typ = 'transit_walk2';
+    #     graph_tags = ['walk','transit']
+    #     for k,tag in enumerate(graph_tags):
+    #         try: 
+    #             GRAPH = GRAPHS[tag];
+    #             node = ox.distance.nearest_nodes(GRAPHS['transit'], loc[0],loc[1]);
+    #             if tag == 'walk':
+    #                 node = BUS_STOP_NODES[tag][node];        
+    #             PERSON['nodes'][typ][tag] = node;
+    #             x = GRAPHS[tag].nodes[node]['x']
+    #             y = GRAPHS[tag].nodes[node]['y']
+    #             PERSON['locs'][typ][tag] = (x,y);
+    #             node_lists[typ][tag].append(node)
+    #         except: 
+    #             PERSON['nodes'][typ][tag] = None
+    #             PERSON['locs'][typ][tag] = None;
+
+
+
+    #     ##################################################################
+    #     loc = ORIG_LOC[i];
+    #     typ = 'transit_drive1';    
+    #     graph_tags = ['drive','transit']
+    #     for k,tag in enumerate(graph_tags):
+    #         try:
+    #             GRAPH = GRAPHS[tag];
+    #             node = ox.distance.nearest_nodes(GRAPHS['transit'], loc[0],loc[1]);
+    #             if tag == 'drive':
+    #                 node = BUS_STOP_NODES[tag][node];        
+    #             PERSON['nodes'][typ][tag] = node;
+    #             x = GRAPHS[tag].nodes[node]['x']
+    #             y = GRAPHS[tag].nodes[node]['y']
+    #             PERSON['locs'][typ][tag] = (x,y);
+    #             node_lists[typ][tag].append(node)
+    #         except: 
+    #             PERSON['nodes'][typ][tag] = None
+    #             PERSON['locs'][typ][tag] = None;            
+
+    #     loc = DEST_LOC[i];
+    #     typ = 'transit_drive2';
+    #     graph_tags = ['drive','transit']
+    #     for k,tag in enumerate(graph_tags):
+    #         try:
+    #             GRAPH = GRAPHS[tag];
+    #             node = ox.distance.nearest_nodes(GRAPHS['transit'], loc[0],loc[1]);
+    #             if tag == 'drive':
+    #                 node = BUS_STOP_NODES[tag][node];        
+    #             PERSON['nodes'][typ][tag] = node;
+    #             x = GRAPHS[tag].nodes[node]['x']
+    #             y = GRAPHS[tag].nodes[node]['y']
+    #             PERSON['locs'][typ][tag] = (x,y);
+    #             node_lists[typ][tag].append(node)
+    #         except: 
+    #             PERSON['nodes'][typ][tag] = None
+    #             PERSON['locs'][typ][tag] = None;            
+
+
+    #     ##################################################################
+    #     loc = ORIG_LOC[i];
+    #     typ = 'transit_ondemand1';    
+    #     graph_tags = ['ondemand','transit']
+    #     for k,tag in enumerate(graph_tags):
+    #         try: 
+    #             GRAPH = GRAPHS[tag];
+    #             node = ox.distance.nearest_nodes(GRAPHS['transit'], loc[0],loc[1]);
+    #             if tag == 'ondemand':
+    #                 node = BUS_STOP_NODES[tag][node];        
+    #             PERSON['nodes'][typ][tag] = node;
+    #             x = GRAPHS[tag].nodes[node]['x']
+    #             y = GRAPHS[tag].nodes[node]['y']
+    #             PERSON['locs'][typ][tag] = (x,y);
+    #             node_lists[typ][tag].append(node)
+    #         except: 
+    #             PERSON['nodes'][typ][tag] = None
+    #             PERSON['locs'][typ][tag] = None;
+
+
+    #     loc = DEST_LOC[i];
+    #     typ = 'transit_ondemand2';
+    #     graph_tags = ['ondemand','transit']
+    #     for k,tag in enumerate(graph_tags):
+    #         try:
+    #             GRAPH = GRAPHS[tag];
+    #             node = ox.distance.nearest_nodes(GRAPHS['transit'], loc[0],loc[1]);
+    #             if tag == 'ondemand':
+    #                 node = BUS_STOP_NODES[tag][node];                    
+    #             node = BUS_STOP_NODES['ondemand'][node];        
+    #             PERSON['nodes'][typ][tag] = node;
+    #             x = GRAPHS[tag].nodes[node]['x']
+    #             y = GRAPHS[tag].nodes[node]['y']
+    #             PERSON['locs'][typ][tag] = (x,y);
+    #             node_lists[typ][tag].append(node)
+    #         except: 
+    #             PERSON['nodes'][typ][tag] = None
+    #             PERSON['locs'][typ][tag] = None;
+
+
+    #     ###################################################################          
+    #     ###################################################################        
+    #     for m,mode in enumerate(modes):
+    #         PERSON['costs'][mode] = {};
+    #         PERSON['prefs'][mode] = {};
+    #         for j,factor in enumerate(factors):
+    #             sample_pt = STATS[mode]['mean'][factor] + STATS[mode]['stdev'][factor]*(np.random.rand()-0.5)
+    #             PERSON['prefs'][mode][factor] = sample_pt
+    #             PERSON['costs'][mode][factor] = 0.
+    #         PERSON['weights'][mode] = dict(zip(factors,np.ones(len(factors))));
+
+
+    #     #############################################################################
+    #     person_loc = PERSON['locs']['source']['drive']
+    #     dist = 10000000;
+    #     PERSON['delivery_grp'] = {};    
+    #     picked_delivery = None;    
+    #     for k,delivery in enumerate(DELIVERY['direct']):
+    #         DELIV = DELIVERY['direct'][delivery]
+    #         loc = DELIV['loc']
+    #         diff = np.array(list(person_loc))-np.array(list(loc));
+    #         if mat.norm(diff)<dist:
+    #             PERSON['delivery_grp']['delivery2'] = delivery
+    #             dist = mat.norm(diff);
+    #             picked_delivery = delivery            
+    #     DELIVERY['direct'][picked_delivery]['people'].append(person)
+    #     DELIVERY['direct'][picked_delivery]['sources'].append(PERSON['nodes']['source']['ondemand']);
+    #     DELIVERY['direct'][picked_delivery]['targets'].append(PERSON['nodes']['target']['ondemand']);    
+
+
+    #     person_loc = PERSON['locs']['source']['drive']
+    #     dist = 10000000;
+    #     PERSON['delivery_grp'] = {};
+    #     picked_delivery = None;
+    #     for k,delivery in enumerate(DELIVERY2):
+    #         DELIV = DELIVERY2[delivery]
+    #         loc = DELIV['loc']
+    #         diff = np.array(list(person_loc))-np.array(list(loc));
+    #         if mat.norm(diff)<dist:
+    #             PERSON['delivery_grp']['delivery2'] = delivery
+    #             dist = mat.norm(diff);
+    #             picked_delivery = delivery
+    #     DELIVERY2[picked_delivery]['people'].append(person)
+    #     DELIVERY2[picked_delivery]['sources'].append(PERSON['nodes']['source']['ondemand']);
+    #     DELIVERY2[picked_delivery]['targets'].append(PERSON['nodes']['target']['ondemand']);    
+
 
 
 
