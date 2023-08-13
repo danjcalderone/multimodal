@@ -2,8 +2,7 @@
 # DOCUMENTATION - Multi-Modal Transit Simulation for CARTA
 
 
-<img src="multimodal_example2.png"  width="500">
-<img src="multimodal_example5.png"  width="500">
+<img src="multimodal_example2.png"  width="300"> <img src="multimodal_example5.png"  width="300">
 <img src="flow_full.png"  width="500">
 
 
