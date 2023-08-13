@@ -152,6 +152,34 @@ def findNode(node,from_type,to_type,NODES):
         out = NODES['ondemand'][to_type][node]
     return out
 
+
+def find_closest_node(node,mode1,mode2,GRAPHS):
+    # node must be in GRAPHS[mode1]
+    GRAPH1 = GRAPHS[mode1]; feed1 = GRAPH1
+    GRAPH2 = GRAPHS[mode2]; feed2 = GRAPH2
+    stop = node;
+    if mode1 == 'gtfs':
+        lat = list(feed1.stops[feed1.stops['stop_id']==stop].stop_lat)
+        lon = list(feed1.stops[feed1.stops['stop_id']==stop].stop_lon)
+        lat = lat[0]
+        lon = lon[0]
+    else:
+        lon = GRAPH1.nodes[node]['x'];
+        lat = GRAPH1.nodes[node]['y'];
+    if mode2 == 'gtfs':
+        close = np.abs(feed2.stops.stop_lat - lat) + np.abs(feed2.stops.stop_lon - lon);
+        close = close==np.min(close)
+        found_stop = feed2.stops.stop_id[close];
+        found_node = list(found_stop)[0]
+    else:
+        found_node = ox.distance.nearest_nodes(GRAPH2, lon,lat); #ORIG_LOC[i][0], ORIG_LOC[i][1]);
+        xx = GRAPH2.nodes[found_node]['x'];
+        yy = GRAPH2.nodes[found_node]['y'];
+        # if not(np.abs(xx-lon) + np.abs(yy-lat) <= 0.1):
+        #     found_node = None;
+    return found_node
+
+
 def find_close_node(node,graph,find_in_graph):
     """
     description -- takes node in one graph and finds the closest node in another graph
@@ -236,26 +264,49 @@ def drop_duplicates(df):
 #convert hte df to str type, drop duplicates and then select the rows from original df.
 
 
+
+def createEmptyNodesDF():
+    NODES = {};
+    NODES['all'] = pd.DataFrame({'drive':[],'walk':[],'transit':[],'ondemand':[],'gtfs':[]},index=[])
+    NODES['drive'] = pd.DataFrame({'walk':[],'transit':[],'ondemand':[],'gtfs':[]},index=[])
+    NODES['walk'] = pd.DataFrame({'drive':[],'transit':[],'ondemand':[],'gtfs':[]},index=[])
+    NODES['ondemand'] = pd.DataFrame({'drive':[],'walk':[],'transit':[],'gtfs':[]},index=[])
+    NODES['transit'] = pd.DataFrame({'drive':[],'walk':[],'ondemand':[],'gtfs':[]},index=[])
+    NODES['gtfs'] = pd.DataFrame({'drive':[],'walk':[],'transit':[],'ondemand':[]},index=[])
+    return NODES
+
+
+
 def addNodeToDF(node,mode,GRAPHS,NODES):
 
     # print(node)
     # print(mode)
 
+
     if not(node in NODES['all'][mode]):
-        if mode == 'gtfs':
-            gtfs_node = node;
-            drive_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['drive']);
-            walk_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['walk']);
-            transit_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['transit']);
-            ondemand_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['ondemand']);
 
-        else:
 
-            drive_node = find_close_node(node,GRAPHS[mode],GRAPHS['drive']);
-            walk_node = find_close_node(node,GRAPHS[mode],GRAPHS['walk']);
-            transit_node = find_close_node(node,GRAPHS[mode],GRAPHS['transit']);
-            ondemand_node = find_close_node(node,GRAPHS[mode],GRAPHS['ondemand']);
-            gtfs_node = find_close_node_graph_to_gtfs(node,GRAPHS[mode],GRAPHS['gtfs'])
+        drive_node = find_closest_node(node,mode,'drive',GRAPHS);
+        walk_node = find_closest_node(node,mode,'walk',GRAPHS);
+        transit_node = find_closest_node(node,mode,'transit',GRAPHS);
+        ondemand_node = find_closest_node(node,mode,'ondemand',GRAPHS);
+        gtfs_node = find_closest_node(node,mode,'gtfs',GRAPHS)
+
+        if False: #OLD VERSION 
+            if mode == 'gtfs':
+                gtfs_node = node;
+                drive_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['drive']);
+                walk_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['walk']);
+                transit_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['transit']);
+                ondemand_node = find_close_node_gtfs_to_graph(node,GRAPHS[mode],GRAPHS['ondemand']);
+
+            else:
+                # OLD VERSION
+                drive_node = find_close_node(node,GRAPHS[mode],GRAPHS['drive']);
+                walk_node = find_close_node(node,GRAPHS[mode],GRAPHS['walk']);
+                transit_node = find_close_node(node,GRAPHS[mode],GRAPHS['transit']);
+                ondemand_node = find_close_node(node,GRAPHS[mode],GRAPHS['ondemand']);
+                gtfs_node = find_close_node_graph_to_gtfs(node,GRAPHS[mode],GRAPHS['gtfs'])
 
 
 
@@ -931,11 +982,7 @@ def planGTFSSeg(source,target,mode,GRAPHS,WORLD,NODES,mass=1,track=False,verbose
 
     try:
         stop_list,trip_list = create_chains(source,target,PREV_NODES,PREV_TRIPS);
-
         _,stopList,edgeList = list_inbetween_stops(FEED,stop_list,trip_list);
-
-        # print(stopList)
-        # print('')
         path,_ = gtfs_to_transit_nodesNedges(stopList,NODES)
         distance = REACHED[source][-1][target]
     except: 
