@@ -13,7 +13,9 @@ python notebook that runs the simulation engine
 ### multimodal_functions.py
 support functions for simulation
 
-<img src="object_diagram1.png"  width="1000">
+<img src="object_diagram2.png"  width="1000">
+
+<img src="object_flow1.png"  width="1000">
 
 # OBJECTS
 
