@@ -13,7 +13,115 @@
 # ------------ CODE DUMP ------------ CODE DUMP ------------ CODE DUMP 
 # ------------ CODE DUMP ------------ CODE DUMP ------------ CODE DUMP 
 
+# #### OLD VERSION #### OLD VERSION #### OLD VERSION #### OLD VERSION #### OLD VERSION 
+# #### OLD VERSION #### OLD VERSION #### OLD VERSION #### OLD VERSION #### OLD VERSION 
+# #### OLD VERSION #### OLD VERSION #### OLD VERSION #### OLD VERSION #### OLD VERSION 
 
+# for i,stop in enumerate(list(feed.stops.stop_id)):
+#     if np.mod(i,200)==0: print(i)
+#     node_index = 'node'+str(len(NODESDF.index));
+#     gtfs_node = stop;
+#     walk_node = find_close_node_gtfs_to_graph(stop,GRAPHS['gtfs'],GRAPHS['walk']);
+#     drive_node = find_close_node_gtfs_to_graph(stop,GRAPHS['gtfs'],GRAPHS['drive']);
+#     ondemand_node = find_close_node_gtfs_to_graph(stop,GRAPHS['gtfs'],GRAPHS['ondemand']);
+#     transit_node = find_close_node_gtfs_to_graph(stop,GRAPHS['gtfs'],GRAPHS['transit']);    
+#     new_nodes = pd.DataFrame({'drive':[drive_node],'walk':[walk_node],
+#                               'transit':[transit_node],'ondemand':[ondemand_node],
+#                               'gtfs':[gtfs_node]},index=[node_index])
+#     NODESDF = NODESDF.append(new_nodes);        
+    
+    
+# print('starting transit nodes...')
+# for i,node in enumerate(list(GRAPHS['transit'].nodes())):
+#     if np.mod(i,200)==0: print(i)
+#     node_index = 'node'+str(len(NODESDF.index));
+#     transit_node = node;
+#     walk_node = find_close_node(node,GRAPHS['transit'],GRAPHS['walk']);
+#     drive_node = find_close_node(node,GRAPHS['transit'],GRAPHS['drive']);
+#     ondemand_node = find_close_node(node,GRAPHS['transit'],GRAPHS['ondemand']);
+#     gtfs_node = find_close_node_graph_to_gtfs(node,GRAPHS['transit'],GRAPHS['gtfs']);       
+    
+    
+#     new_nodes = pd.DataFrame({'drive':[drive_node],'walk':[walk_node],
+#                               'transit':[transit_node],'ondemand':[ondemand_node],
+#                               'gtfs':[gtfs_node]},index=[node_index])
+#     NODESDF = NODESDF.append(new_nodes);
+
+
+# print('starting delivery1 sources...')
+# for i,node in enumerate(delivery1_node_lists['source']):
+#     drive_node = node #['drive']
+#     if np.mod(i,200)==0: print(i)
+#     node_index = 'node'+str(len(NODESDF.index));
+#     walk_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['walk']);
+#     transit_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['transit']);
+#     ondemand_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['ondemand']);    
+#     gtfs_node = find_close_node_graph_to_gtfs(drive_node,GRAPHS['drive'],GRAPHS['gtfs']);
+#     new_nodes = pd.DataFrame({'drive':[drive_node],'walk':[walk_node],
+#                               'transit':[transit_node],'ondemand':[ondemand_node],
+#                               'gtfs':[gtfs_node]},index=[node_index])
+#     NODESDF = NODESDF.append(new_nodes);    
+    
+# print('starting delivery2 sources...')
+# for i,node in enumerate(delivery2_node_lists['source']):
+#     drive_node = node #['drive']
+#     if np.mod(i,200)==0: print(i)
+#     node_index = 'node'+str(len(NODESDF.index));
+#     walk_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['walk']);
+#     transit_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['transit']);
+#     ondemand_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['ondemand']);    
+#     gtfs_node = find_close_node_graph_to_gtfs(drive_node,GRAPHS['drive'],GRAPHS['gtfs']);   
+    
+    
+#     new_nodes = pd.DataFrame({'drive':[drive_node],'walk':[walk_node],
+#                               'transit':[transit_node],'ondemand':[ondemand_node],
+#                               'gtfs':[gtfs_node]},index=[node_index])
+#     NODESDF = NODESDF.append(new_nodes);    
+
+# print('starting source nodes...')
+# for i,node in enumerate(source_nodes):
+#     drive_node = node; #node['drive']
+#     if np.mod(i,200)==0: print(i)
+#     node_index = 'node'+str(len(NODESDF.index));
+#     walk_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['walk']);
+#     transit_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['transit']);
+#     ondemand_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['ondemand']);    
+#     gtfs_node = find_close_node_graph_to_gtfs(drive_node,GRAPHS['drive'],GRAPHS['gtfs']);   
+
+    
+#     new_nodes = pd.DataFrame({'drive':[drive_node],'walk':[walk_node],
+#                               'transit':[transit_node],'ondemand':[ondemand_node],
+#                               'gtfs':[gtfs_node]},index=[node_index])
+#     NODESDF = NODESDF.append(new_nodes);    
+    
+# print('starting target nodes...')
+# for i,node in enumerate(target_nodes):
+#     drive_node = node; #node['drive']
+#     if np.mod(i,200)==0: print(i)
+#     node_index = 'node'+str(len(NODESDF.index));
+#     walk_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['walk']);
+#     transit_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['transit']);
+#     ondemand_node = find_close_node(drive_node,GRAPHS['drive'],GRAPHS['ondemand']);    
+#     gtfs_node = find_close_node_graph_to_gtfs(drive_node,GRAPHS['drive'],GRAPHS['gtfs']);
+    
+    
+#     new_nodes = pd.DataFrame({'drive':[drive_node],'walk':[walk_node],
+#                               'transit':[transit_node],'ondemand':[ondemand_node],
+#                               'gtfs':[gtfs_node]},index=[node_index])
+#     NODESDF = NODESDF.append(new_nodes);    
+    
+    
+
+    
+    
+
+    
+# end_time = time.time()
+# print('time to create nodes...: ',end_time-start_time)
+#     # NODES[node_walk] = {'transit':node}; #,'walk':node_walk,'drive':node_drive,'ondemand':node_ondemand}
+    
+# NODES['all'] = NODESDF.copy();
+# updateNodesDF(NODES);    
 
 cutoff = VARS['lam'][-1];
 for k, node in enumerate(all_pickup_nodes):
