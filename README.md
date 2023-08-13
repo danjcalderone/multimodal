@@ -5,7 +5,7 @@
 <img src="multimodal_example2.png"  width="500">
 <img src="multimodal_example5.png"  width="500">
 <img src="flow_full.png"  width="500">
-<img src="object_diagram1.png"  width="500">
+
 
 
 # FILES
@@ -14,7 +14,7 @@ python notebook that runs the simulation engine
 ### multimodal_functions.py
 support functions for simulation
 
-
+<img src="object_diagram1.png"  width="1000">
 
 # OBJECTS
 
