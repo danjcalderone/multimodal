@@ -13,8 +13,11 @@ python notebook that runs the simulation engine
 ### multimodal_functions.py
 support functions for simulation
 
+
+# OBJECT ORGANIZATION CHART
 <img src="object_diagram2.png"  width="1000">
 
+# FLOW ORGANIZATION CHART
 <img src="object_flow1.png"  width="1000">
 
 # OBJECTS
