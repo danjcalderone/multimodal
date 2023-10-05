@@ -2,8 +2,8 @@
 # DOCUMENTATION - Multi-Modal Transit Simulation for CARTA
 
 
-<img src="multimodal_example2.png"  width="350"> <img src="multimodal_example5.png"  width="300">
-<img src="flow_full.png"  width="650">
+<img src="./figs/sims/multimodal_example2.png"  width="350"> <img src="multimodal_example5.png"  width="300">
+<img src="./figs/sims/flow_full.png"  width="650">
 
 
 
@@ -18,7 +18,7 @@ support functions for simulation
 <img src="./figs/diagrams/object_diagram2.png"  width="1000">
 
 # FLOW ORGANIZATION CHART
-<img src="object_flow1.png"  width="1000">
+<img src="./figs/diagrams/object_flow1.png"  width="1000">
 
 # OBJECTS
 
