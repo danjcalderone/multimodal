@@ -556,20 +556,26 @@ def generate_bnds(center_point):
 
 def SETUP_GRAPHS_CHATTANOOGA(center_point,radius,time_window,bnds=[]):
     print('loading feed...')
-    feed = gtfs.Feed('data/gtfs/carta_gtfs.zip', time_windows=[0, 6, 10, 12, 16, 19, 24])
     # Loading GTFS feed
+    feed = gtfs.Feed('data/gtfs/carta_gtfs.zip', time_windows=[0, 6, 10, 12, 16, 19, 24])
+    
     # # szz = 1.; radius = szz*5000;
     # # start = 8*60*60; end = 9*60*60;
     start = time_window[0]; end = time_window[1];
     print('constructing transit graph from feed...')
+    ### turning the gtfs into a graph...
     graph_bus = load_feed_as_graph(feed);#,start,end) ## NEW
     GRAPHS = {};
     print('loading drive graph...')
+    ### Loading in the driving graph
     GRAPHS['drive'] = ox.graph_from_place('chattanooga',network_type='drive'); #ox.graph_from_polygon(graph_boundary,network_type='drive')
     print('loading walk graph...')
+    #### loading in the walking graph
     GRAPHS['walk'] = ox.graph_from_place('chattanooga',network_type='walk'); #ox.graph_from_polygon(graph_boundary,network_type='walk')
     GRAPHS['transit'] = graph_bus;
 
+
+    #### ondemand graph is the same as driving
     GRAPHS['ondemand'] = GRAPHS['drive'].copy()    
     GRAPHS['gtfs'] = feed;
 
@@ -578,6 +584,10 @@ def SETUP_GRAPHS_CHATTANOOGA(center_point,radius,time_window,bnds=[]):
     zzgraph = nx.compose_all(graphs);
     GRAPHS['all'] = zzgraph
 
+
+    ##### CHOPPING THE GRAPHS DOWN TO FIT IN A BOUNDING BOX #############
+    ##### CHOPPING THE GRAPHS DOWN TO FIT IN A BOUNDING BOX #############
+
     if len(bnds)>0:
         mode = 'drive'; GRAPHS[mode] = subgraph_bnd_box(GRAPHS[mode],bnds[0],bnds[1]);
         mode = 'ondemand'; GRAPHS[mode] = subgraph_bnd_box(GRAPHS[mode],bnds[0],bnds[1]);
@@ -585,6 +595,8 @@ def SETUP_GRAPHS_CHATTANOOGA(center_point,radius,time_window,bnds=[]):
         mode = 'transit'; GRAPHS[mode] = subgraph_bnd_box(GRAPHS[mode],bnds[0],bnds[1]);
         mode = 'all'; GRAPHS[mode] = subgraph_bnd_box(GRAPHS[mode],bnds[0],bnds[1]);    
 
+
+    #### COMPUTING GRAPHS WITH EDGES REVERESED....
     print('computing reverse graphs...')
     RGRAPHS = {};
     for i,mode in enumerate(GRAPHS):
@@ -592,6 +604,8 @@ def SETUP_GRAPHS_CHATTANOOGA(center_point,radius,time_window,bnds=[]):
         if not(mode=='gtfs'):
             RGRAPHS[mode] = GRAPHS[mode].reverse()  
 
+
+    #### OLD... CHANGING THE BUS GRAPH SOME....
     print('connecting close bus stops...')
     graph_bus_wt = GRAPHS['transit'].copy();
     bus_nodes = list(graph_bus_wt.nodes);
@@ -617,6 +631,7 @@ def SETUP_GRAPHS_CHATTANOOGA(center_point,radius,time_window,bnds=[]):
 
 
 def generate_segtypes(vers): # reg1,reg2,bg
+	#### preloaded types of trips... 
     SEG_TYPES = {}
     if vers == 'reg1':
         SEG_TYPES['car_no'] = [('ondemand',),('walk','gtfs','walk'),('walk','gtfs','ondemand'),('ondemand','gtfs','walk'),('ondemand','gtfs','ondemand')];
@@ -669,6 +684,9 @@ def generate_segtypes(vers): # reg1,reg2,bg
 
 
 def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
+
+
+	#### initial parameters... 
     
     if 'pop_cutoff' in  params: pop_cutoff = params['pop_cutoff'];
     else: pop_cutoff = 30;
@@ -708,13 +726,22 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
     ####### from pygris import tracts, block_groups
     import pygris
     
+
+
+    ### Reading in the loads data set... (pandas dataframes)
     asdf0 = pd.read_parquet('data/pop/lodes_combinations_upd.parquet')
-    asdf0.head()
+    # asdf0.head()
     
+    ##### forget what this does.... 
     BGDEFS = pygris.block_groups(state = "TN", county="Hamilton", cb = True, cache=True)
     BGDEFS['pt']  = BGDEFS['geometry'].representative_point()
     BGDEFS['lon'] = BGDEFS['pt'].x;
     BGDEFS['lat'] = BGDEFS['pt'].y;
+
+
+
+    #### Reading American Commuter Survey data set (pandas dataframes)
+    ### information about vehicle ussage 
     VEHS = pd.read_csv('data/pop/ACSDT5Y2020.B992512-Data.csv')
     # BGDEFS['AFFGEOID']
     #VEHS = VEHS.rename(columns={'B992512_001E':'from_cbg','home_geo':'from_geo','w_geocode':'to_cbg','work_geo':'to_geo'}).drop(columns=['return_time'])[['from_cbg', 'to_cbg', 'total_jobs', 'go_time', 'from_geo', 'to_geo']]
@@ -723,18 +750,15 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
     
     print(len(VEHS))
     
+
+    ### computing the percentage of workers with and without cars... (within pandas)
     VEHS['workers'] = pd.to_numeric(VEHS['workers'],errors='coerce')
     VEHS['wout_cars'] = pd.to_numeric(VEHS['wout_cars'],errors='coerce')
     VEHS['w_cars'] = pd.to_numeric(VEHS['w_cars'],errors='coerce')
     VEHS['percent_w_cars'] = VEHS['w_cars']/VEHS['workers'];
     VEHS['percent_wout_cars'] = VEHS['wout_cars']/VEHS['workers'];
-    
     VEHS = VEHS.merge(BGDEFS,how='left',on='AFFGEOID')
     
-    # DataFrame.merge(right, how='inner',on=on=None, left_on=None, right_on=None,
-    #                 left_index=False, right_index=False, sort=False, suffixes=('_x', '_y'),
-    #                 copy=None, indicator=False, validate=None)[source]
-
     
     # BGDEFS.explore()
     
@@ -743,6 +767,9 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
     # print(np.sum(list(VEHS['wout_cars'])))
     # print(np.sum(list(VEHS['w_cars'])))
 
+
+
+    ### Filtering out population members outside a particular bounding box... 
     if len(cutoff_bnds)>0:
         #print('cutting off shit...')
 
@@ -759,12 +786,18 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
         mask1 = mask1 &  (asdf0['work_loc_lat'] >= bot_bnd[1]);
         mask1 = mask1 &  (asdf0['work_loc_lat'] <= top_bnd[1]);
         asdf0 = asdf0[mask1]
-
-    
     box = [minz[0],maxz[0],minz[1],maxz[1]];
+
+    #### explain this later.... 
     asdf2 = filterODs(asdf0,box,eps=params['eps_filterODs']);
 
+    ##################################################################
+    ##################################################################
+    ##################################################################
 
+
+    ### initialization for the main loop.... 
+    ### initialization for the main loop.... 
 
     mask1 = asdf2['pop']>pop_cutoff; #8;
     mask2 = asdf2['pop']<-1;
@@ -778,6 +811,7 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
     samps = list(asdf.index)
     num_people = len(samps)
     print(num_people)
+
     
     locs = [];
     for i,node in enumerate(GRAPHS['drive'].nodes):
@@ -792,7 +826,6 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
     else:
         minz = np.min(locs,0)
         maxz = np.max(locs,0)
-
     
     NODES = {}
     
@@ -830,30 +863,50 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
     i3 = 0;
     # for i,samp in enumerate(asdf.index):
     
-    asdflist = list(asdf.index);
+    asdflist = list(asdf.index);  ## list of indices of asdf dataframe...
     people_tags = [];
 
+
+    ## home = origin
+    ## work = dest
+
+
+    ##### MAIN LOOP ##### MAIN LOOP ##### MAIN LOOP ##### MAIN LOOP 
+    ##### MAIN LOOP ##### MAIN LOOP ##### MAIN LOOP ##### MAIN LOOP 
+
+    ############################################################
+   	####  VERSION 1: uses the data sets loaded above.... 
+   	############################################################
     if OD_version == 'basic':
+
+
         while i1<len(asdf.index):
             i = i2;
-            samp = asdflist[i1];
+            samp = asdflist[i1];  # grabbing appropriate index of the dataframe... 
                 
             
-            hlon = asdf['hx'].loc[samp]
-            hlat = asdf['hy'].loc[samp]    
-            wlon = asdf['wx'].loc[samp]
+            ### pulling out information from the data frame... 
+            hlon = asdf['hx'].loc[samp]  # home longitude
+            hlat = asdf['hy'].loc[samp]  # home latitude...
+            wlon = asdf['wx'].loc[samp]  # work longitude
             wlat = asdf['wy'].loc[samp]
-            home_loc = np.array([hlon,hlat]);    
+            home_loc = np.array([hlon,hlat]); # locations...  
             work_loc = np.array([wlon,wlat]);
-        
+
+
+            #### figuring out what percentage of the population has cars or not based on ACS given home location
+        	### VEHS has the info the ACS... driving information.... 
+        	#### for a population... what region are they in so which driving statistics apply... 
             VALS = np.abs(VEHS['lon']-hlon)+np.abs(VEHS['lat']-hlat);
-            mask1 = VALS == np.min(VALS);
+            mask1 = VALS == np.min(VALS); ### find closest region in the VEHS data (so apply that driving statistic)
             perc_wcars = list(VEHS[mask1]['percent_w_cars'])[0]
             perc_wnocars = list(VEHS[mask1]['percent_wout_cars'])[0]
+
+
+
         
             home_size = asdf['pop'].loc[samp]
             work_size = asdf['pop'].loc[samp]
-            
             
             ################################################################
             test1 = (maxz[0]>=home_loc[0]) and (maxz[1]>=home_loc[1]);
@@ -863,34 +916,45 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
             if True: #test1 and test2 and test3 and test4:
                 
                 #### VERSION 1 #### VERSION 1 #### VERSION 1 #### VERSION 1
+                #### adding a population with cars... 
                 if perc_wcars > 0.:
-                    if np.mod(i2,200)==0: print(i2)
-                    tag = 'person'+str(i2);
+
+                	
+                    if np.mod(i2,200)==0: print(i2) ### just shows how fast the loop is running... 
+
+
+                    tag = 'person'+str(i2); ### creating a poulation tag... 
                     people_tags.append(tag)
-                    PRE[tag] = {};
+                    PRE[tag] = {}; ## initializing 
                 
-                    PRE[tag]['orig_loc'] = home_loc
+                	### adding location information.... 
+                    PRE[tag]['orig_loc'] = home_loc; 
                     PRE[tag]['dest_loc'] = work_loc;
-                    
-                    LOCS['orig'].append(home_loc);
+                    LOCS['orig'].append(home_loc);  
                     LOCS['dest'].append(work_loc);
                     
+
+                    #### adding whether or not they have a car... 
                     PRE[tag]['take_car'] = 1.;
                     PRE[tag]['take_transit'] = 1.;
                     PRE[tag]['take_ondemand'] = 1.;        
                     PRE[tag]['take_walk'] = 1.;
             
-                    
-                    
+                                      
                     if compute_nodes:
+                    	### finding the nearest nodes within the driving network... 
                         home_node = ox.distance.nearest_nodes(GRAPHS['drive'],home_loc[0],home_loc[1]);
                         work_node = ox.distance.nearest_nodes(GRAPHS['drive'], work_loc[0],work_loc[1]);
                         
+
+                        #### size of the population.... 
                         if home_node in home_sizes: home_sizes[home_node] = home_sizes[home_node] + home_size;
                         else: home_sizes[home_node] = home_size;
                         if work_node in work_sizes: work_sizes[work_node] = work_sizes[work_node] + work_size;
                         else: work_sizes[work_node] = work_size;
                         
+
+                        ### adding nodes to different lists/objects... 
                         home_nodes.append(home_node);
                         work_nodes.append(work_node);
                         NODES['orig'].append(home_node);
@@ -899,26 +963,31 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
                         PRE[tag]['home_node'] = home_node;        
                         PRE[tag]['work_node'] = work_node;
                         
+
+                        #### adding the population size to the objects... 
                         PRE[tag]['pop'] = home_size*perc_wcars;
 
-
-
-                    samp = np.random.rand(1);
+                    ##### adding specific trip types... 
+                    # input from SEG_TYPES is generated using the function 
+                    # generate_segtypes
+                    samp = np.random.rand(1);  # extra sampling thing if we want to change the percentage... 
                     if (samp < 0.3):
                         seg_types = SEG_TYPES['car_opt']
-                        # [('drive',),
-                        #              ('ondemand',),
-                        #              ('walk','gtfs','walk'),
-                        #              ('walk','gtfs','ondemand'),
-                        #              ('ondemand','gtfs','walk'),
-                        #              ('ondemand','gtfs','ondemand')
-                        #             ];
 
                     else: 
                         seg_types = SEG_TYPES['car_only'] #[('drive',)]
 
                     PRE[tag]['seg_types'] = seg_types
-            
+
+                    ## seg_types: list of different travel modes... 
+                    #### form...
+                    # [('drive',),
+                    #  ('ondemand',),
+                    #  ('walk','gtfs','walk'),
+                    #  ('walk','gtfs','ondemand'),
+                    #  ('ondemand','gtfs','walk'),
+                    #  ('ondemand','gtfs','ondemand')
+                    #  ];
                     i2 = i2 + 1;
 
 
@@ -927,6 +996,7 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
                     #### VERSION 2 #### VERSION 2 #### VERSION 2 #### VERSION 2 ####
         
                 if perc_wnocars > 0.:
+                	#### adding a population without cars... 
                     
                     if np.mod(i2,200)==0: print(i2)
                     tag = 'person'+str(i2);
@@ -979,10 +1049,18 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
         SIZES['home_sizes'] = home_sizes
         SIZES['work_sizes'] = work_sizes
 
+
+
+    ###### ##############################################################################
+    ###### VERSION 2: generates artifical data sampling gaussian distributions... 
+    ###### ##############################################################################
     elif OD_version == 'gauss':
 
         orig_locs = np.array([0,2])
         dest_locs = np.array([0,2])
+
+        ###### loading the gaussian distribution info 
+        ### sampling from distributions
         for kk,stats in enumerate(params['gauss_stats']):
             stats
             num_pops = stats['num']
@@ -991,10 +1069,12 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
             orig_cov = stats['origs']['cov'] 
             dest_cov = stats['dests']['cov']
             pop = stats['pop']
+            ### sampled origin and destination locations.... 
             orig_locs = np.vstack([orig_locs,np.random.multivariate_normal(orig_mean, orig_cov, size=num_pops)]);
             dest_locs = np.vstack([dest_locs,np.random.multivariate_normal(dest_mean, dest_cov, size=num_pops)]);
 
 
+        # loop through each origin location... 
         for i,orig_loc in enumerate(orig_locs):
             dest_loc = dest_locs[i]
             home_loc = orig_loc; #np.array([hlon,hlat]);    
@@ -1017,7 +1097,11 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
             test4 = (minz[0]<=work_loc[0]) and (minz[1]<=work_loc[1]);
             if test1 and test2 and test3 and test4:
                 
+
+            	##### Adding populations.... 
+
                 #### VERSION 1 #### VERSION 1 #### VERSION 1 #### VERSION 1
+                #### if the population has a car....
                 if perc_wcars > 0.:
                     if np.mod(i2,200)==0: print(i2)
                     tag = 'person'+str(i2);
@@ -1077,11 +1161,14 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
 
 
 
-                    #### VERSION 2 #### VERSION 2 #### VERSION 2 #### VERSION 2 ####
-        
+                #### VERSION 2 #### VERSION 2 #### VERSION 2 #### VERSION 2 ####
+        		### if population doesn't have car 
                 if perc_wnocars > 0.:
                     
                     if np.mod(i2,200)==0: print(i2)
+
+
+                    #### creating a new population... 
                     tag = 'person'+str(i2);
                     people_tags.append(tag)
                     PRE[tag] = {};
@@ -1137,7 +1224,8 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
 
 
 
-    ####### DELIVERY STUFF 
+    ####### SETTING UP ONDEMAND SERVICE
+    ####### SETTING UP ONDEMAND SERVICE
 
     start_time = time.time()
     print('starting delivery1 sources...')
@@ -1155,12 +1243,7 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
     end_time = time.time()
     print('time to create nodes...: ',end_time-start_time)
         # NODES[node_walk] = {'transit':node}; #,'walk':node_walk,'drive':node_drive,'ondemand':node_ondemand}    
-        
-        
     num_people = len(people_tags);
-
-
-        
     num_targets = num_people;
 
 
@@ -1173,6 +1256,9 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
         num_deliveries =  int(num_people/10);
         num_deliveries2 = int(num_people/10);
 
+
+    ##### kmeans clustering of the population locations to see where the different ondemand vehicles should go
+    ### CHANGE FOR PILOT....
     node_group = NODES['orig'] + NODES['dest']
     out = kmeans_nodes(num_deliveries,'ondemand',GRAPHS,node_group); 
     LOCS['delivery1'] = out['centers']
@@ -1213,7 +1299,9 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
     print('time to setup origins & dests: ',end_time - start_time)    
 
 
+    ### TODO: COLLAPSE DOWN INTO ONE OBJECT...
 
+    ### PRE is main object... 
     return {'PRE':PRE,'NODES':NODES,'LOCS':LOCS,'SIZES':SIZES,'VEHS':VEHS}
 
 
