@@ -4,6 +4,9 @@ import scipy as sp
 import scipy.linalg as smat
 # import cvxpy as cp
 
+import datetime
+from datetime import datetime
+
 import osmnx as ox
 import networkx as nx
 import geopandas as gpd
@@ -36,6 +39,12 @@ warnings.filterwarnings('ignore')
 
 import random
 import sys
+
+
+import plotly
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 import pygris
 import os
@@ -71,6 +80,957 @@ os.chdir('/Users/dan/Documents/multimodal/')
 ########### BASIC ########### BASIC ########### BASIC ########### BASIC ########### BASIC 
 ########### BASIC ########### BASIC ########### BASIC ########### BASIC ########### BASIC 
 ########### BASIC ########### BASIC ########### BASIC ########### BASIC ########### BASIC 
+
+def setup_ondemand_service(PRE, NODES, LOCS, SIZES, GRAPHS, params, people_tags):
+    
+    start_time = time.time()
+    print('starting delivery1 sources...')
+    for i,node in enumerate(NODES['delivery1']):
+        if np.mod(i,200)==0: print(i)
+        addNodeToDF(node,'drive',GRAPHS,NDF)
+        
+    print('starting delivery2 sources...')
+    for i,node in enumerate(NODES['delivery2']):
+        if np.mod(i,200)==0: print(i)
+        addNodeToDF(node,'drive',GRAPHS,NDF)
+            
+    
+            
+    end_time = time.time()
+    print('time to create nodes...: ',end_time-start_time)
+    num_people = len(people_tags);
+    num_targets = num_people;
+
+    if 'num_deliveries' in params:
+        num_deliveries = params['num_deliveries']['delivery1'];
+        num_deliveries2 = params['num_deliveries']['delivery2'];
+    else:
+        num_deliveries =  int(num_people/10);
+        num_deliveries2 = int(num_people/10);
+
+
+    ##### k-means clustering of the population locations to see where the different ondemand vehicles should go
+    ### CHANGED TO RUN FOR PILOT REGION....
+    node_group = NODES['orig'] + NODES['dest']
+    out = kmeans_nodes(num_deliveries,'ondemand',GRAPHS,node_group); 
+    LOCS['delivery1'] = out['centers']
+    out = kmeans_nodes(num_deliveries,'ondemand',GRAPHS,node_group); 
+    LOCS['delivery2'] = out['centers']
+    
+    
+    for i,loc in enumerate(LOCS['delivery1']):
+        NODES['delivery1'].append(ox.distance.nearest_nodes(GRAPHS['ondemand'],loc[0],loc[1]));
+    for i,loc in enumerate(LOCS['delivery2']):
+        NODES['delivery2'].append(ox.distance.nearest_nodes(GRAPHS['ondemand'],loc[0],loc[1]));
+    bus_graph = GRAPHS['bus_graph_wt'];
+    delivery_transit_nodes = sample(list(bus_graph.nodes()), num_deliveries2)
+    end_time = time.time();
+    print('time to setup origins & dests: ',end_time - start_time)
+    
+    print("Done setting up on-demand service")
+    
+    return PRE, NODES, LOCS, SIZES
+
+
+def generate_driver_dataframe(group, start_time, end_time, am_capacity=8, wc_capacity=2):
+    # Create a DataFrame with driver information
+    driver_data = {
+        'group': group,
+        'driver_start_time': [start_time],
+        'driver_end_time': [end_time],
+        'am_capacity': [am_capacity],
+        'wc_capacity': [wc_capacity],
+    }
+    
+    driver_df = pd.DataFrame(driver_data)
+    return driver_df
+
+
+def add_logistic_values (PRE, tag, 
+                         DWT = 1, DWM = 0, DWC = 0, DWS = 0,
+                         WWT = 1, WWM = 0, WWC = 0, WWS = 0,
+                         TWT = 1 , TWM = 0, TWC = 0, TWS = 0, 
+                         OWT = 1, OWM = 0, OWC = 0, OWS = 0):
+
+            # Add fields for 'drive'
+            PRE[tag]['drive_weight_time'] = DWT
+            PRE[tag]['drive_weight_money'] = DWM
+            PRE[tag]['drive_weight_conven'] = DWC
+            PRE[tag]['drive_weight_switches'] = DWS
+
+            # Add fields for 'walk'
+            PRE[tag]['walk_weight_time'] = WWT
+            PRE[tag]['walk_weight_money'] = WWM
+            PRE[tag]['walk_weight_conven'] = WWC
+            PRE[tag]['walk_weight_switches'] = WWS
+
+            # Add fields for 'ondemand'
+            PRE[tag]['ondemand_weight_time'] = OWT
+            PRE[tag]['ondemand_weight_money'] = OWM
+            PRE[tag]['ondemand_weight_conven'] = OWC
+            PRE[tag]['ondemand_weight_switches'] = OWS
+
+            # Add fields for 'transit'
+            PRE[tag]['transit_weight_time'] = TWT
+            PRE[tag]['transit_weight_money'] = TWM
+            PRE[tag]['transit_weight_conven'] = TWC
+            PRE[tag]['transit_weight_switches'] = TWS
+            
+            return PRE
+
+
+
+
+########### BASIC ########### BASIC ########### BASIC ########### BASIC ########### BASIC 
+########### BASIC ########### BASIC ########### BASIC ########### BASIC ########### BASIC 
+########### BASIC ########### BASIC ########### BASIC ########### BASIC ########### BASIC 
+########### BASIC ########### BASIC ########### BASIC ########### BASIC ########### BASIC 
+
+class DASHBOARD:
+    def __init__(self,version='version0'): #,params,folder):
+        # self.GRAPHS = params['GRAPHS']
+        # self.CONVERTER = params['CONVERTER'];
+        # self.ONDEMAND = params['ONDEMAND'];
+        # self.NETWORKS = params['NETWORKS'];
+        # self.SIZES = params['SIZES']
+        # self.size = (0,0);
+
+        self.DATAINDS = {}
+
+        
+        
+        self.version = version; #'version0'
+        if self.version == 'version0':
+
+            self.width = 900; self.height = 900; 
+            self.numx = 12; self.numy = 12;
+            self.row_heights = [0.083,0.083,0.083,0.083,0.083,0.083,
+                                0.083,0.083,0.083,0.083,0.083,0.083];
+            self.column_widths = [0.25,0.025,0.13,0.025,0.07,0.025,
+                                  0.25,0.025,0.13,0.025,0.07,0.025];
+            # list(0.15*np.ones(self.numx))
+            self.SLIDERS = {};
+            self.list_of_sliders = [];
+            self.buttons = {};
+
+            self.slider_names = ['drive','walk','ondemand','gtfs','ondemand_grp','gtfs_grp']; #'gtfs_run','ondemand_grp','ondemand_run']
+            # self.slider_locs = [(0.7,0.3),(0.7,0.5),(0.9,0.1),(0.9,0.5)]; 
+            self.slider_grid_locs = [[8,8],[4,8],[0,0],[0,6],[0,2],[0,8]];
+            self.slider_hpads = [[-0.3,0.3],[-0.3,0.3],[-0.1,0.1],[-0.1,0.1],[-0.1,0.1],[-0.1,0.1]];
+            self.slider_grid_lengths = [3,3,1,1,1,1];
+            # self.slider_locs = [(0.7,0.7),(0.7,0.5),(0.,0.),(0.5,0.)];
+            self.slider_lengths = []
+            # self.slider_col_lengths = [[0],[7],[8,]
+                                # (0.1,0.1),(0.1,0.1),(0.1,0.1),(0.1,0.1)]; 
+            self.button_names = ['sort_by'];
+            self.button_locs = [(0.7,0.3)]; #,(0.7,0.5),(0.9,0.1),(0.9,0.5)]; 
+
+
+            
+            # pads = 't','b','l','r';
+            rpads = [0,0,0,0]
+            rmargs = [0,0,0,0];
+            rpads2 = [0,0,0,0.01];
+            rmargs2 = [0,0,0,0];
+
+            modes = ['drive','walk','ondemand','gtfs'];
+            factors = ['dist','time','money','conven','switches'];
+            self.factors = factors;
+            inds1 = [0,1,2,3]
+            inds2 = [0,1,2,3,4,5]
+            rinds = {}; dinds = {}; 
+            addtags = ['bar','box','bar_grp','box_grp','bar_run','box_run'];
+            for i,mode in enumerate(modes):
+                for j,factor in enumerate(factors):
+                    for k,tag in enumerate(addtags):
+                        fulltag = mode+'_'+factor+'_'+tag
+
+                        
+                        rinds[fulltag] = [inds1[j],inds2[k]];
+                        
+                        if mode in ['drive','walk']:
+                            if tag == 'box': rinds[fulltag][1] = inds2[k+2]
+                        
+                        temp = (1,1);
+                        if mode in ['drive','walk']:
+                            if k == 0: temp = (1,3);
+                        dinds[fulltag] = temp;
+
+            
+            self.pltgrps = {};
+            self.pltgrps['fig'] = {'tag':'fig','loc':(1,1),'inds':(1,1),'dinds':(1,1),'subplts':[]};
+            modes = ['drive','walk','ondemand','gtfs'];
+            factors 
+            inds1 = [1,5,9,9]; inds2 = [9,9,1,7];
+            for i,mode in enumerate(modes):
+                ind = (inds1[i],inds2[i])
+                self.pltgrps[mode] = {'tag':mode,'inds':ind,'dinds':(4,6)};
+                subplt_tags = [mode+'_'+factor+'_bar' for factor in factors]
+                subplt_tags = subplt_tags + [mode+'_'+factor+'_box' for factor in factors]
+                if mode in ['ondemand','gtfs']:
+                    subplt_tags = subplt_tags +  [mode+'_'+factor+'_bar_grp' for factor in factors]
+                    subplt_tags = subplt_tags + [mode+'_'+factor+'_box_grp' for factor in factors]
+                    subplt_tags = subplt_tags + [mode+'_'+factor+'_bar_run' for factor in factors]
+                    subplt_tags = subplt_tags + [mode+'_'+factor+'_box_run' for factor in factors]
+                self.pltgrps[mode]['subplts'] = subplt_tags;
+                # print(mode)
+                # print(subplt_tags)
+
+            self.subplts = {}
+            self.subplts['fig'] = {'rloc'};
+            modes = ['drive','walk','ondemand','gtfs'];
+            factors = ['dist','time','money','switches'];
+
+            
+
+            # for temp in rinds: print(temp)
+            # for temp in dinds: print(temp)
+            
+            for mode in modes:
+                for factor in factors:
+                    addtags = ['bar','box']
+                    for tag in addtags:
+                        fulltag = mode + '_' + factor + '_' + tag
+
+                        rind = rinds[fulltag]; dind = dinds[fulltag];
+                        rpad = rpads; rmarg = rmargs;
+                        if tag == 'box': rpad = rpads2;
+                        
+                        
+                        self.subplts[fulltag] = {'rinds':rind,'dinds':dind,'rpads':rpad,'rmargs':rmarg}
+                                                            # 'rloc':rlocs[factor + tag],
+                                                            # 'rdims':rdims[factor + tag],
+                                                 
+
+                    
+                    if mode in ['ondemand','gtfs']:
+                        addtags = ['bar_grp','box_grp','bar_run','box_run'];
+                        for tag in addtags:
+                            fulltag = mode + '_' + factor + '_' + tag
+                            rind = rinds[fulltag]; dind = dinds[fulltag];
+                            rpad = rpads; rmarg = rmargs;
+                            if tag == 'box_run' or tag == 'box_grp': rpad = rpads2;
+                            self.subplts[fulltag] = {'rinds':rind,'dinds':dind,'rpads':rpad,'rmargs':rmarg}
+                                                            # 'rloc':rlocs[factor + tag],
+                                                            # 'rdims':rdims[factor + tag],
+
+
+    def makeGrid(self):
+        self.grid = [[{} for _ in range(self.numx)] for j in range(self.numy)]
+        self.plts = {};
+
+
+        for pltgrp in self.pltgrps:
+            PLTGRP = self.pltgrps[pltgrp];
+            # gloc = PLTGRP['loc'];
+            gind = PLTGRP['inds'];
+            # gpad = PLTGRP['pads'];
+            # gidims = PLTGRP['dinds'];
+            subplts = PLTGRP['subplts'];
+            for subplt in subplts:
+                SUBPLT = self.subplts[subplt];
+                # rlocs = SUBPLT['rloc']
+                # rdims = SUBPLT['rdims'];
+                rind = SUBPLT['rinds'];
+                dind = SUBPLT['dinds'];
+                ind = (gind[0]+rind[0],gind[1]+rind[1])
+                rpad = SUBPLT['rpads'];
+                pad = rpad
+
+                
+                self.plts[subplt] = {};
+                self.plts[subplt]['inds'] = ind
+                self.plts[subplt]['dinds'] = dind
+                self.plts[subplt]['pads'] = pad;
+                # self.plts[subplt]['loc'] = [gloc[0] + gidims[0]*rlocs[0],gloc[1]+gidims[1]*rlocs[1]];
+                # self.plts[subplt]['dims'] = [gidims[0]*rdims[0],gidims[1]*rdims[1]];
+
+        for plt in self.plts:
+            PLT = self.plts[plt]
+            ind = PLT['inds']; dind = PLT['dinds']
+            pad = PLT['pads']; #marg = PLT['margs'];            
+            self.grid[ind[0]-1][ind[1]-1] = {"rowspan":dind[0], "colspan":dind[1],
+                                               "t": pad[0],"b": pad[1],"l": pad[2],"r": pad[3]}; #,"type": "image"}] + [None for _ in range(2*num_fig_cols-1)] + [{},{}]
+
+
+    def addTraces(self):
+        self.TRACES = {};
+        DFs = self.dataDFs;
+
+        factors = ['dist','time','money','switches']
+        factors2 = ['distance','travel_time','money','switches']
+        show_boxes = False; 
+
+        ####### 
+        for mode in DFs:
+            DF = DFs[mode];
+            for i,factor in enumerate(factors):
+
+                sortby = 'sorted_by_travel_time';
+                
+                blarg = {'turnoninds':[int(10*np.random.rand(1))]}
+                params = {};
+                plt = mode + '_' + factor + '_bar'
+                name = mode + '_bar_' + 'all'; params['name'] = name
+                PLT = self.plts[plt]
+                factor2 = factors2[i]
+                xx = list(DF[sortby]); yy = list(DF[factor2])
+                xx = np.array(xx); yy = np.array(yy)
+                temp = np.argsort(xx);
+                xx = xx[temp]; yy = yy[temp]
+                params['loc'] = PLT['inds'];
+                params['x'] = xx; params['y'] = yy
+                params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.3;
+                # params['sliders'] = {mode:blarg};
+                params['typ'] = 'bar'
+                self.TRACES[name] = TRACE(self.fig,params)
+
+                plt = mode + '_' + factor + '_bar'
+                PLT = self.plts[plt]
+                for j,x in enumerate(xx):#[:30]):
+                    blarg = {'turnoninds':[j]}; #int(10*np.random.rand(1))}
+                    params = {};                    
+                    name = mode + '_'+factor+'_bar_' + str(x); params['name'] = name
+                    params['loc'] = PLT['inds'];
+                    params['x'] = [x]; params['y'] = [yy[j]]
+                    params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.8;
+                    params['sliders'] = {mode:blarg};
+                    params['typ'] = 'bar'
+                    self.TRACES[name] = TRACE(self.fig,params)
+
+
+
+                # if show_boxes:
+                #     plt = mode + '_' + factor + '_box'
+                #     name = mode + '_box_' + 'all'; params['name'] = name
+                #     PLT = self.plts[plt]
+                #     name = mode + '_box_' + 'all'; params['name'] = name
+                #     params['typ'] = 'box'
+                #     params['loc'] = PLT['inds'];
+                #     self.TRACES[name] = TRACE(self.fig,params)
+
+
+                if mode in ['ondemand','gtfs']:
+                    plt1 = mode + '_' + factor + '_bar'
+                    plt2 = mode + '_' + factor + '_bar_grp'
+                    PLT1 = self.plts[plt1]
+                    PLT = self.plts[plt2]
+                    factor2 = factors2[i]
+
+
+                    group_ids = DF['group_ids'].unique()
+                    for j,group_id in enumerate(group_ids):
+                        DF2 = DF[DF['group_ids'] == group_id]
+                        xx2 = np.array(list(DF2[sortby]));
+                        yy2 = np.array(list(DF2[factor2]))
+                        # print(group_id)
+                        # print(len(yy2))
+
+                        params = {};
+                        name = mode + '_' + factor + 'bar_grp_' + group_id;
+                        params['name'] = name
+                        params['loc'] = PLT['inds'];
+                        params['x'] = np.array(list(range(len(xx2))))+1;
+                        params['y'] = yy2
+                        params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.5;
+                        blarg = {'turnoninds':[j]}; #int(10*np.random.rand(1))}
+                        params['sliders'] = {mode+'_grp':blarg};
+                        params['typ'] = 'bar'
+                        self.TRACES[name] = TRACE(self.fig,params)
+
+                        params = {};
+                        name = mode + '_' + factor + 'bar_all_grp_' + group_id;
+                        params['name'] = name
+                        params['loc'] = PLT1['inds'];
+                        params['x'] = xx2; params['y'] = yy2
+                        params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.5;
+                        blarg = {'turnoninds':[j]}; #int(10*np.random.rand(1))}
+                        params['sliders'] = {mode+'_grp':blarg};
+                        params['typ'] = 'bar'
+                        self.TRACES[name] = TRACE(self.fig,params)                        
+
+                    # if show_boxes:
+                    #     plt = mode + '_' + factor + '_box_grp'
+                    #     PLT = self.plts[plt]
+                    #     name = mode + '_box_' + 'all'; params['name'] = name
+                    #     params['typ'] = 'box'
+                    #     params['loc'] = PLT['inds']
+                    #     self.TRACES[name] = TRACE(self.fig,params)
+
+                    if False:
+                        plt = mode + '_' + factor + '_bar_run'
+                        PLT = self.plts[plt]
+                        factor2 = factors2[i]
+                        xx = list(DF[sortby]); yy = list(DF[factor2])
+                        params = {};
+                        name = mode + '_bar_' + 'all'; params['name'] = name
+                        params['loc'] = PLT['inds'];
+                        params['x'] = xx; params['y'] = yy
+                        params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.5;
+                        params['sliders'] = {mode:blarg};
+                        params['typ'] = 'bar'
+                        self.TRACES[name] = TRACE(self.fig,params)
+
+                    # if show_boxes:
+                    #     plt = mode + '_' + factor + '_box_run'
+                    #     PLT = self.plts[plt]
+                    #     name = mode + '_box_' + 'all'; params['name'] = name
+                    #     params['loc'] = PLT['inds'];
+                    #     params['typ'] = 'box'
+                    #     self.TRACES[name] = TRACE(self.fig,params)
+
+
+
+
+
+
+
+    def connectSliders(self):
+        for trace in self.TRACES:
+            TRACE = self.TRACES[trace];
+            for slider in TRACE.sliders:
+                slider_data = TRACE.sliders[slider];
+                dataind = TRACE.dataind;
+                turnoninds = slider_data['turnoninds'];
+                self.SLIDERS[slider].addTrace(turnoninds,dataind)
+
+        for slider in self.SLIDERS:
+            SLIDER = self.SLIDERS[slider];
+            SLIDER.addSteps();
+            self.list_of_sliders.append(SLIDER.dict);            
+
+        # for name in self.trace_names:            
+        #     self.TRACES[name]
+        # self.trace_names
+
+
+
+    def addSliders(self):
+        self.SLIDERS = {}
+        self.list_of_sliders = [];
+        for i,name in enumerate(self.slider_names):
+            params = {};
+
+
+            grid_len = self.slider_grid_lengths[i];
+            grid_loc = self.slider_grid_locs[i]
+            hpad = self.slider_hpads[i]
+
+            gloc0 = int(np.floor(grid_loc[0])); gloc0d = grid_loc[0]-gloc0;
+            gloc1 = int(np.floor(grid_loc[1])); gloc1d = grid_loc[1]-gloc1;
+
+            loc0 = np.sum(self.row_heights[:gloc0]) + self.row_heights[gloc0]*gloc0d;
+            loc1 = np.sum(self.column_widths[:gloc1]) + self.column_widths[gloc1]*gloc1d;
+
+            glen1 = int(np.floor(grid_len)); glen1d = grid_len - glen1;
+            slider_len = np.sum(self.column_widths[gloc1:gloc1+glen1]) + self.column_widths[glen1]*glen1d
+
+
+            col_wid = self.column_widths[gloc1]*self.width;
+
+            # print(loc0)
+            # print()
+
+            params['loc'] = [loc1,loc0]
+            params['length'] = slider_len
+            params['pad'] = {'t':0,'b':0,'l':hpad[0]*col_wid,'r':hpad[1]*col_wid};
+
+            params['name'] = name;
+            params['active'] = True;
+            self.SLIDERS[name] = SLIDER(params)
+            
+
+
+
+    def addOutputs(self,OUTPUTS):
+        # self.OUTPUTS = OUTPUTS;
+        factors = ['distance','travel_time','money','switches']
+        modes = ['drive','walk','ondemand','gtfs'];
+        DFs = {};
+        for mode in modes:
+            if mode in ['drive','walk']: cols = ['distance','travel_time','money','switches']
+            if mode in ['ondemand','gtfs']: cols = ['distance','travel_time','money','switches','group_ids','run_ids']
+            df = OUTPUTS['by_mode'][mode]
+            df = df[cols]
+            for factor in factors:
+                df = df.sort_values(by=[factor])
+                df['sorted_by_' + factor] = list(range(len(df)+1))[1:]
+            DFs[mode] = df.copy();
+        self.dataDFs = DFs
+
+
+    def show(self):
+        fig = make_subplots(rows=self.numy,cols=self.numx,
+                            column_widths = self.column_widths,
+                            row_heights = self.row_heights,
+                            horizontal_spacing=0.0,#list(0.02*np.ones(12)),
+                            vertical_spacing=0.0,
+                            specs=self.grid);
+                            # print_grid=True); 
+        self.fig = fig;
+        # for plt in self.plts:
+        #     PLT = self.plts[plt]
+        #     inds = PLT['inds']
+        #     fig.add_trace(go.Scatter(x=[300, 400, 500], y=[600, 700, 800]),row=inds[0],col=inds[1]);
+
+
+        self.addTraces();
+        self.addSliders();
+        self.connectSliders();
+
+        
+        # self.addButtons();
+        self.fig.update_layout(width=self.width,height=self.height,showlegend=False); #dims[0],height=dims[1],boxmode='group'); #, xaxis_visible=False, yaxis_visible=False)
+        temp = [SLIDER.dict for SLIDER in self.SLIDERS.values()]
+        self.fig.update_layout(sliders=temp)
+
+
+        self.fig.update_xaxes(showticklabels=False) 
+        self.fig.update_yaxes(showticklabels=False)
+            # self.list_of_sliders);
+        # fig.update_layout(updatemenus=BUTTONS)
+        # fig.update_layout(sliders=SLIDERS)
+# width = np.sum(column_widths); height = 1.2*np.sum(row_heights); #+padb1*3)
+# fig.update_layout(width=width, height=height, xaxis_visible=False, yaxis_visible=False)
+
+        fig.show()
+
+    def addButtons(self):
+        list_of_buttons = [];
+        for i,name in enumerate(self.button_names):
+            params = {};
+            params['loc'] = self.button_locs[i];
+            params['name'] = name; 
+            self.buttons[name] = BUTTON(params)
+            list_of_buttons.append(self.buttons[name].dict);
+        self.fig.update_layout(updatemenus=list_of_buttons)
+        # fig.update_layout(sliders=SLIDERS)
+        # width = np.sum(column_widths); height = 1.2*np.sum(row_heights); #+padb1*3)
+        # fig.update_layout(width=width, height=height, xaxis_visible=False, yaxis_visible=False)
+
+
+# class TRACE:
+#     def __init__(self,params = {}):
+#         self.image = None;
+#         self.name = None
+#         self.x = None
+#         self.y = None
+#         self.sliders = {};#'':{},
+#         self.loc = None;
+#         self.dataind = None
+#         if 'name' in params: self.name = params['name'];
+#         if 'image' in params: self.image = params['image'];
+#         if 'x' in params: self.x = params['x'];
+#         if 'y' in params: self.y = params['y'];
+#         if 'loc' in params: self.loc = params['loc']
+#         if 'dataind' in params: self.dataind = params['dataind'];
+#         if 'sliders' in params: self.sliders = params['sliders'];
+
+#     def show(self,fig):
+#         fig.add_trace(go.Bar(x=self.x,y=self.y),row=loc[0],col=loc[1]);
+#         #     fig.add_trace(go.Bar(x=counts2,y=costs2,width=0.5,base ='overlay',marker = {'color' :color,'opacity':0.5}),inds2[0],inds2[1])
+
+class TRACE:
+    def __init__(self,fig,params = {}):
+        self.image = None;
+        self.name = None
+        self.x = None
+        self.y = None
+        self.sliders = {};#'':{},
+        self.loc = None;
+        self.dataind = None;
+        self.color = [0,0,0];
+        self.opacity = 0.7;
+        self.typ = None;
+        if 'name' in params: self.name = params['name'];
+        if 'image' in params: self.image = params['image'];
+        if 'x' in params: self.x = params['x'];
+        if 'y' in params: self.y = params['y'];
+        if 'loc' in params: self.loc = params['loc']
+        # if 'dataind' in params: self.dataind = params['dataind'];
+        if 'sliders' in params: self.sliders = params['sliders'];
+        if 'color' in params: self.color = params['color'];
+        if 'opacity' in params: self.opacity = params['opacity'];
+        if 'typ' in params: self.typ = params['typ']
+
+#                 fig.add_traces(go.Box(y=VALS,fillcolor=color,opacity=opac,marker_color=edgecolor,boxpoints=boxpoints,width=0.4,line={'width':1},name=series_name),inds[0],inds[1]);
+#             ###########
+    #         #     fig.add_trace(go.Bar(x=counts2,y=costs2,width=0.5,base ='overlay',marker = {'color' :color,'opacity':0.5}),inds2[0],inds2[1])
+
+        self.color = 'rgba(0,0,0)'
+        if self.typ == 'bar':
+            fig.add_trace(go.Bar(x=self.x,y=self.y,base = 'overlay',
+                            marker = {'color':self.color,'opacity':self.opacity}),row=self.loc[0],col=self.loc[1]);
+        if self.typ == 'box':
+            edgecolor = 'rgba(0,0,0)'
+            # boxpoints = 'all'
+            fig.add_traces(go.Box(
+                           y=self.y,fillcolor=self.color,opacity=self.opacity,
+                           marker_color=edgecolor,width=0.4,line={'width':1},name=self.name),
+                           self.loc[0],self.loc[1]);
+        self.dataind = len(fig.data)-1;
+
+
+        # # for i in range(len(fig.data)): 
+# #     if not(i in all_start_inds):
+# #         fig.data[i].visible = False;
+
+
+
+    # def show(self,fig):
+        #     fig.add_trace(go.Bar(x=counts2,y=costs2,width=0.5,base ='overlay',marker = {'color' :color,'opacity':0.5}),inds2[0],inds2[1])
+
+
+
+
+
+class SLIDER:
+    def __init__(self,params):
+        self.loc = [0,0];
+        self.xanchor = "left"
+        self.yanchor = "middle"
+        self.active = 0;
+        self.length = 0.4; 
+        self.pad = {'t':0,'b':0,'r':100,'l':-100};
+        self.currentvalue = {};
+
+        if 'loc' in params: self.loc = params['loc'];
+        if 'length' in params: self.length = params['length']
+        if 'xanchor' in params: self.xanchor = params['xanchor']
+        if 'yanchor' in params: self.yanchor = params['yanchor']
+        if 'active' in params: self.active = params['active'];
+        if 'pad' in params: self.pad = params['pad'];
+        if 'currentvalue' in params: self.currentvalue = params['currentvalue'];
+
+        self.steps = [];
+        self.datainds = [];
+        self.turnoninds = [];
+        self.num_steps = 0;
+        # self.add();
+
+    # def add(self):
+    #     ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS
+
+    def addTrace(self,turnoninds,dataind):
+
+        maxturnonind = int(np.max(turnoninds))
+        if self.num_steps < maxturnonind + 1:
+            new_num_steps = maxturnonind + 1;
+            diff_size = new_num_steps - self.num_steps;
+            self.turnoninds = self.turnoninds + [[] for _ in range(diff_size)];
+            self.num_steps = new_num_steps
+
+        for turnonind in turnoninds:
+            self.turnoninds[turnonind].append(len(self.datainds));
+        self.datainds.append(dataind)
+        
+
+    def addSteps(self):
+        self.steps = [];
+        for i in range(self.num_steps):
+            STEP = dict(method="update",label='',args=[{'visible':[False for _ in range(len(self.datainds))]},{},self.datainds]);
+            # for j,on_ind in enumerate(self.sliderinds[i]):
+            for turnonind in self.turnoninds[i]:
+                STEP['args'][0]['visible'][turnonind] = True;
+            self.steps.append(STEP)
+        # self.add()
+        self.dict = dict(x=self.loc[0],y=self.loc[1],len=self.length,
+                         xanchor=self.xanchor,yanchor=self.yanchor,
+                         active=self.active,pad=self.pad,
+                         steps=self.steps,currentvalue=self.currentvalue)        
+
+
+    # def addStep(self,sliderind,dataind):
+    #     if self.num_steps < sliderind + 1:
+    #         new_num_steps = sliderind + 1;
+    #         diff_size = new_num_steps - self.num_steps;
+
+    #         val = None
+
+    #         self.datainds = self.datainds + [val for _ in range(diff_size)];
+    #         for i in range(new_num_steps):
+    #             if i < self.num_steps:
+    #                 STEP = self.steps[i]
+    #                 STEP['args'][0]['visible'] = STEP['args'][0]['visible'] + [False for _ in range(diff_size)];
+    #                 STEP['args'][2] = STEP['args'][2] + [val for _ in range(diff_size)];
+    #             else:
+    #                 STEP = dict(method="update",label='',args=[{'visible':[False for _ in range(new_num_steps)]},{},[val for _ in range(new_num_steps)]]);
+    #                 self.steps.append(STEP)
+    #         self.num_steps = new_num_steps;
+            
+    #     # for i in range(self.num_steps):
+    #     STEP = self.steps[sliderind]
+    #     STEP['args'][0]['visible'][sliderind] = True;
+    #     STEP['args'][2][sliderind] = dataind;
+    #     self.datainds[sliderind] = dataind
+        
+
+
+
+class BUTTON:
+    def __init__(self,params):
+        self.loc = [0,0];
+        self.xanchor = "left"
+        self.yanchor = "top"
+        self.active = 0;
+        self.length = 0.4; 
+        self.pad = {'t':0,'b':0,'r':0,'l':0};
+        self.currentvalue = {};
+
+        if 'loc' in params: self.loc = params['loc'];
+        if 'length' in params: self.length = params['length']
+        if 'xanchor' in params: self.xanchor = params['xanchor']
+        if 'yanchor' in params: self.yanchor = params['yanchor']
+        if 'active' in params: self.active = params['active'];
+        if 'pad' in params: self.pad = params['pad'];
+        if 'currentvalue' in params: self.currentvalue = params['currentvalue'];
+
+        self.steps = [];
+        self.datainds = [];
+        self.num_steps = 0;
+        self.add();
+
+    def add(self):
+        ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS
+        self.dict = dict(x=self.loc[0],y=self.loc[1],len=self.length,
+                         xanchor=self.xanchor,yanchor=self.yanchor,
+                         active=0,pad=self.pad,steps=self.steps,currentvalue=self.currentvalue)        
+
+    def addStep(self,sliderind,dataind):
+        if self.num_steps < sliderind + 1:
+            new_num_steps = sliderind + 1;
+            diff_size = new_num_steps - self.num_steps;
+            self.datainds = self.datainds + [None * diff_size];
+            for i in range(new_num_steps):
+                if i < self.num_steps:
+                    STEP = self.steps[i]
+                    STEP['args'][0]['visible'] = STEP['args'][0]['visible'] + [False * diff_size];
+                    STEP['args'][2] = STEP['args'][2] + [None for _ in range(diff_size)];
+                else:
+                    STEP = dict(method="update",label='',args=[{'visible':[False*new_num_steps]},{},[None for _ in range(new_num_steps)]]);
+                    self.steps.append(STEP)
+        self.num_steps = new_num_steps;
+        for i in range(self.num_steps):
+            STEP = self.steps[i]
+            STEP['args'][0]['visible'][sliderind] = True;
+            STEP['args'][2][sliderind] = dataind;
+        self.datainds[sliderind] = dataind
+
+
+# fig.update_layout(updatemenus=BUTTONS)
+# fig.update_layout(sliders=SLIDERS)
+# width = np.sum(column_widths); height = 1.2*np.sum(row_heights); #+padb1*3)
+# fig.update_layout(width=width, height=height, xaxis_visible=False, yaxis_visible=False)
+
+
+
+# class TRACE:
+#     def __init__(self):
+#         self.image = None;
+#         self.tags = None;
+#         self.datas = {'data1':{'tag':None,'x':None,'y':None},
+#                       'data2':{'tag':None,'x':None,'y':None}}
+#         self.datax = None;
+#         self.datay = None;
+#         self.dataind = None;
+#         self.DF = None;
+#         self.sliders 
+
+
+# class BUTTON:
+#     def __init__(self):
+#         pass
+
+
+
+
+
+def generateRandomOutputs():
+
+
+    OUTPUTS = {};
+    OUTPUTS['by_mode'] = {};
+
+    num_data = 4;
+    bnds = np.array([[-85.3394,  34.9458],[-85.2494,  35.0658]]);    
+    people = ['person'+str(int(400*num)) for num in np.random.rand(num_data)];
+    trip_ids = ['trip'+str(int(1000*num)) for num in np.random.rand(3*num_data)];
+    seg_ids = {}; seg_num = 0;
+    networks = ['gtfs','ondemand','drive','walk'];
+    num_segs = 10;
+
+    grp_ids = ['group'+str(int(5*num)) for num in np.random.rand(num_segs)]
+    run_ids = ['run'+str(int(5*num)) for num in np.random.rand(num_segs)]
+
+
+    for network in networks:
+        seg_ids[network] = ['seg' + str(int(num+seg_num)) for num in range(num_segs)]
+        seg_num = len(seg_ids[network])
+
+    trip_types = [['drive'],['ondemand'],['walk'],
+                  ['walk','gtfs','walk'],
+                  ['ondemand','gtfs','walk'],
+                  ['walk','gtfs','ondemand'],
+                  ['ondemand','gtfs','ondemand']];
+
+    time_wind = [21600,36000]
+    time_win_diff = 200;
+    time_trip_diff = 1000;
+
+    for network in networks:
+
+
+        num_segs = len(seg_ids[network]);
+        num_data = num_segs
+        mode = network;
+        DATA = {}
+        DATA['seg_id'] = seg_ids[network]; #[mode+'_seg'+str(int(1000*num)) for num in np.random.rand(num_data)];
+
+        DATA['trip_ids'] = [];        
+        for i in range(num_segs):
+            if np.random.rand(1)<0.1: DATA['trip_ids'].append(sample(trip_ids,3))
+            elif np.random.rand(1)<0.2: DATA['trip_ids'].append(sample(trip_ids,2))
+            else: DATA['trip_ids'].append(sample(trip_ids,1))
+
+        if network == 'gtfs':
+            DATA['start_node'] = [str(int(1000*num)) for num in np.random.rand(num_segs)];
+            DATA['end_node'] = [str(int(1000*num)) for num in np.random.rand(num_segs)];
+        else:
+            DATA['start_node'] = [int(1000*num) for num in np.random.rand(num_segs)];
+            DATA['end_node'] = [int(1000*num) for num in np.random.rand(num_segs)];
+
+        DATA['start_loc'] = [loc for loc in zip(np.random.uniform(low=bnds[0][0],high=bnds[1][0],size=(num_data)),np.random.uniform(low=bnds[0][1],high=bnds[1][1],size=(num_data)))]
+        DATA['end_loc'] = [loc for loc in zip(np.random.uniform(low=bnds[0][0],high=bnds[1][0],size=(num_data)),np.random.uniform(low=bnds[0][1],high=bnds[1][1],size=(num_data)))]
+        DATA['people'] = [];
+        add_people = [];
+        for i in range(num_segs):
+            if np.random.rand(1)<0.05: DATA['people'].append(sample(people,2))
+            else: DATA['people'].append(sample(people,1))
+
+        DATA['mode'] = [mode] * num_data
+        DATA['distance'] = [200*num for num in np.random.rand(num_data)];
+        DATA['travel_time'] = [1000*num for num in np.random.rand(num_data)];
+        DATA['money'] = [10*num for num in np.random.rand(num_data)];
+        DATA['switches'] = [int(3*num+1) for num in np.random.rand(num_data)];
+
+        DATA['uncongested_distance'] = [200*num for num in np.random.rand(num_data)];
+        DATA['uncongested_travel_time'] = [1000*num for num in np.random.rand(num_data)];
+
+        if mode == 'ondemand' or mode == 'gtfs':
+            DATA['group_ids'] = grp_ids;
+            DATA['run_ids'] = run_ids;
+
+
+        if mode == 'ondemand':
+
+            DATA['pickup_time_start'] = [];
+            DATA['pickup_time_end'] = [];
+            DATA['dropoff_time_start'] = [];
+            DATA['dropoff_time_end'] = [];
+            DATA['pickup_time_scheduled'] = []; 
+            DATA['dropoff_time_scheduled'] = []; 
+            DATA['pickup_time'] = []; 
+            DATA['dropoff_time'] = [];
+
+            for i in range(num_segs):
+
+                pickup_start_time = np.random.uniform(low=time_wind[0],high=time_wind[1]-time_win_diff-time_trip_diff,size=1)[0];
+                pickup_end_time = pickup_start_time + time_win_diff;
+                dropoff_start_time = pickup_start_time + time_trip_diff;
+                dropoff_end_time = dropoff_start_time + time_trip_diff;
+
+                scheduled_pickup_time = pickup_start_time + 0.3*time_win_diff;
+                scheduled_dropoff_time = pickup_start_time + 0.3*time_win_diff + time_trip_diff;
+                pickup_time = pickup_start_time + 0.5*time_win_diff;
+                dropoff_time = pickup_start_time + 0.5*time_win_diff + time_trip_diff;
+
+                DATA['pickup_time_start'].append(pickup_start_time)
+                DATA['pickup_time_end'].append(pickup_end_time)
+                DATA['dropoff_time_start'].append(dropoff_start_time)
+                DATA['dropoff_time_end'].append(dropoff_end_time)
+
+                DATA['pickup_time_scheduled'].append(scheduled_pickup_time)
+                DATA['dropoff_time_scheduled'].append(scheduled_dropoff_time)
+                DATA['pickup_time'].append(pickup_time)
+                DATA['dropoff_time'].append(dropoff_time)
+
+            DATA['num_other_passengers'] = [int(4*num) for num in np.random.rand(num_data)]
+        DF = pd.DataFrame(DATA)
+        OUTPUTS['by_mode'][mode] = DF
+        
+    # DATA = {};
+    # DATA['person'] = people;
+    # DATA['trip_ids'] = [];
+    # DATA['modes'] = [];
+    # DATA['seg_ids'] = [];
+    # # DATA['start_node'] = [];
+    # # DATA['end_node'] = [];
+    # # DATA['start_loc'] = [];
+    # # DATA['end_loc'] = [];    
+    # for person in people:
+    #     DATA['trip_ids'].append(sample(trip_ids,3));
+    #     DATA['modes'].append(sample(trip_types,3))
+    #     DATA['seg_ids'].append([])
+    #     for trip in DATA['modes'][-1]:
+    #         DATA['seg_ids'][-1].append([])
+    #         for mode in trip:
+    #             DATA['seg_ids'][-1][-1].append(sample(seg_ids[mode],1)[0]);
+
+    # num_data = len(people)
+    # DATA['start_node'] = [int(1000*num) for num in np.random.rand(len(people))];
+    # DATA['end_node'] = [int(1000*num) for num in np.random.rand(len(people))];
+    # DATA['start_loc'] = [loc for loc in zip(np.random.uniform(low=bnds[0][0],high=bnds[1][0],size=(num_data)),np.random.uniform(low=bnds[0][1],high=bnds[1][1],size=(num_data)))]
+    # DATA['end_loc'] = [loc for loc in zip(np.random.uniform(low=bnds[0][0],high=bnds[1][0],size=(num_data)),np.random.uniform(low=bnds[0][1],high=bnds[1][1],size=(num_data)))]
+
+    # DF = pd.DataFrame(DATA)
+    # OUTPUTS['by_person'] = DF;
+
+
+    # line_ids = ['line'+str(int(40*num)) for num in np.random.rand(40)];
+    # bus_ids = ['bus' + str(int(400*num)) for num in np.random.rand(400)];
+
+    # DATA = {};
+    # DATA['bus_trip'] = []; #append(gtrip);
+    # tags = ['bus_id','line_id','num']
+    # DATA
+    # for gtrip in gtfs_trips:
+    #     DATA['bus_trip'].append(gtrip);
+
+
+
+
+    return OUTPUTS
+
+# Dataframe2: Ondemand info:
+# Index: driver_run_id
+# Columns: 
+# driver_run
+# vehicle miles traveled
+# passenger miles traveled (desired)
+# VMT/PMT
+# group: ondemand delivery group
+# distance: distance of driver run
+# time: travel time of driver run
+# total_passengers: 
+# time_wpassengers:  list of time spent with each number of passengers
+# ex. [time with 0 passengers, time with 1 passenger, time with 2 passengers, …]
+# distance_wpassengers: list of distance traveled with each number of passengers..
+# ex. [distance with 0 passengers, distance with 1 passenger, distance with 2 passengers,…]
+
+# Dataframe3: Fixed line info: (second priority)
+# origin and destination
+# time between origin and destination
+# transit route number
+# trip id gtfs
+
+# cost 
+# Dataframe’s for each mode separately 
+
+
+
+
+
+
 
 
 ############ BASIC FUNCTIONS ############
@@ -252,6 +1212,339 @@ def kmeans_nodes(num,mode,GRAPHS,node_set = 'all',find_nodes=True):
     return {'centers':centers,'nodes':center_nodes}
 
 
+
+def CONVERT_CSV_TO_PRE_FORMAT(GRAPHS,VEHS, SEG_TYPES, minz, maxz, csv_file_path):
+    
+    #     CSV has columns:
+    #     index
+    #     orig_lon,orig_lat : origin coordinates
+    #     dest_lon,dest_lat : destination coordinates 
+    #     take_car
+    #     take_transit
+    #     take_walk
+    #     take_ondemand
+    #     mass: number of people
+    # Read the CSV file into a pandas DataFrame
+    df = pd.read_csv(csv_file_path)
+    
+            
+    
+    # socio_economic_fp = './data/census_data_hamiliton/2021_census_tract_hamilton.geojson' # Socio economic data path
+    # socio_economic_df = gpd.read_file(socio_economic_fp) # Reading the socio economic data
+    # socio_economic_df = socio_economic_df[['geometry','median_income_last12months']] # Getting only the required columns
+    # median_income = socio_economic_df['median_income_last12months'].median()
+    # median_income = 50000;
+    
+    NODES = {}
+
+    NODES['orig'] = []; NODES['dest'] = [];
+    NODES['delivery1'] = [];  NODES['delivery2'] = [];
+    NODES['delivery1_transit'] = []; NODES['delivery2_transit'] = [];
+    NODES['drive_transit'] = [];
+
+    LOCS = {};
+    LOCS['orig'] = []; LOCS['dest'] = [];
+    LOCS['delivery1'] = []; LOCS['delivery2'] = []
+    SIZES = {};
+    # Initialize the PRE object
+    PRE = {}
+    home_locs = []
+    work_locs = []
+    people_tags = []
+    home_nodes = []
+    work_nodes = []
+    home_sizes = {}
+    work_sizes = {}
+    
+    cost_transit = 3  # Cost of transit trip
+    cost_microtransit = 8  # Cost of microtransit trip
+    
+    # Convert the DataFrame to the PRE format
+    for index, row in df.iterrows():
+
+        median_income = row['median_income']; #50000;
+    
+        tag = f"person{index}"
+        people_tags.append(tag)
+        PRE[tag] = {};
+        take_car = row['take_car']
+        take_transit = row['take_transit']
+        take_walk = row['take_walk']
+        take_ondemand = row['take_ondemand']
+        mass = 1.;#row['mass']
+        leave_time_start = row['leave_time_start']
+        leave_time_end = row['leave_time_end']
+        arrival_time_start = row['arrival_time_start']
+        arrival_time_end = row['arrival_time_end']
+
+        # orig_loc_str = row['orig_loc'].strip('[]')
+        # orig_loc_elements = orig_loc_str.split()        
+        # orig_loc = [float(num) for num in orig_loc_elements]
+        # dest_loc_str = row['dest_loc'].strip('[]')
+        # dest_loc_elements = dest_loc_str.split()
+        # dest_loc = [float(num) for num in dest_loc_elements]
+        orig_loc = eval(row['orig_loc']);
+        dest_loc = eval(row['dest_loc']);
+        # print(eval(orig_loc))
+        # print(eval(dest_loc))
+        # print(type(orig_loc))
+        # print(type(dest_loc))
+
+        PRE[tag]['take_car'] = take_car
+        PRE[tag]['take_transit'] = take_transit
+        PRE[tag][ 'take_ondemand'] = take_ondemand
+        PRE[tag]['take_walk'] = take_walk
+        PRE[tag]['leave_time_start'] = leave_time_start
+        PRE[tag]['leave_time_end'] = leave_time_end
+        PRE[tag]['arrival_time_start'] = arrival_time_start
+        PRE[tag]['arrival_time_end'] = arrival_time_end
+        
+#         orig_loc = np.array([row['orig_long'], row['orig_lat']])
+#         dest_loc = np.array([row['dest_long'], row['dest_lat']])
+        
+    
+        home_loc = orig_loc;    
+        work_loc = dest_loc;
+        PRE[tag]['orig_loc'] = home_loc
+        PRE[tag]['dest_loc'] = work_loc;
+        
+        VALS = np.abs(VEHS['lon']-home_loc[0])+np.abs(VEHS['lat']-home_loc[1]);
+        mask1 = VALS == np.min(VALS);
+
+        perc_wcars = list(VEHS[mask1]['percent_w_cars'])[0]
+        perc_wnocars = list(VEHS[mask1]['percent_wout_cars'])[0]
+        
+        home_size = mass; 
+        work_size = mass; 
+        
+
+        test1 = (maxz[0]>=home_loc[0]) and (maxz[1]>=home_loc[1]);
+        test2 = (minz[0]<=home_loc[0]) and (minz[1]<=home_loc[1]);
+        test3 = (maxz[0]>=work_loc[0]) and (maxz[1]>=work_loc[1]);
+        test4 = (minz[0]<=work_loc[0]) and (minz[1]<=work_loc[1]);
+        
+        if(test1 and test2 and test3 and test4 == False):
+            PRE.pop(tag, None)
+        else:
+        ##### Adding populations.... 
+         
+        #### CASE 1: If the population has a car
+            if perc_wcars > 1e-6:
+            
+                LOCS['orig'].append(home_loc);
+                LOCS['dest'].append(work_loc);
+
+                home_node = ox.distance.nearest_nodes(GRAPHS['drive'],home_loc[0],home_loc[1]);
+                work_node = ox.distance.nearest_nodes(GRAPHS['drive'], work_loc[0],work_loc[1]);
+   
+                if home_node in home_sizes: home_sizes[home_node] = home_sizes[home_node] + home_size;
+                else: home_sizes[home_node] = home_size;
+                if work_node in work_sizes: work_sizes[work_node] = work_sizes[work_node] + work_size;
+                else: work_sizes[work_node] = work_size;
+
+                home_nodes.append(home_node);
+                work_nodes.append(work_node);
+                NODES['orig'].append(home_node);
+                NODES['dest'].append(work_node)
+
+                PRE[tag]['home_node'] = home_node;        
+                PRE[tag]['work_node'] = work_node;
+
+                PRE[tag]['pop'] = home_size*perc_wcars;
+
+
+
+                samp = np.random.rand(1);
+                if (samp < 0.3):
+                    seg_types = SEG_TYPES['car_opt']
+
+                ## seg_types: list of different travel modes... 
+                # [('drive',),
+                #  ('ondemand',),
+                #  ('walk','gtfs','walk'),
+                #  ('walk','gtfs','ondemand'),
+                #  ('ondemand','gtfs','walk'),
+                #  ('ondemand','gtfs','ondemand')
+                #  ];
+
+                else: 
+                    seg_types = SEG_TYPES['car_only'] #[('drive',)]
+
+                PRE[tag]['seg_types'] = seg_types
+
+            #### Case 2: If the population doesn't have a car. 
+            if perc_wnocars > 1e-6:
+        
+                home_node = ox.distance.nearest_nodes(GRAPHS['drive'],home_loc[0],home_loc[1]);
+                work_node = ox.distance.nearest_nodes(GRAPHS['drive'], work_loc[0],work_loc[1]);
+
+
+                if home_node in home_sizes: home_sizes[home_node] = home_sizes[home_node] + home_size;
+                else: home_sizes[home_node] = home_size;
+                if work_node in work_sizes: work_sizes[work_node] = work_sizes[work_node] + work_size;
+                else: work_sizes[work_node] = work_size;
+
+                home_nodes.append(home_node);
+                work_nodes.append(work_node);
+                NODES['orig'].append(home_node);
+                NODES['dest'].append(work_node)
+
+                PRE[tag]['home_node'] = home_node;        
+                PRE[tag]['work_node'] = work_node;
+
+                PRE[tag]['pop'] = home_size*perc_wnocars;
+                    
+                seg_types = SEG_TYPES['car_no']
+                ## seg_types: list of different travel modes... 
+                # [('drive',),
+                #  ('ondemand',),
+                #  ('walk','gtfs','walk'),
+                #  ('walk','gtfs','ondemand'),
+                #  ('ondemand','gtfs','walk'),
+                #  ('ondemand','gtfs','ondemand')
+                #  ];   
+        
+      
+
+        lat = PRE[tag]['orig_loc'][1]
+        lon = PRE[tag]['orig_loc'][0]
+        # Create a pandas DataFrame with a single row
+        df = pd.DataFrame({'Latitude': [lat], 'Longitude': [lon]})
+
+        # Convert the pandas DataFrame into a GeoPandas DataFrame with a Point geometry
+        geometry = [Point(xy) for xy in zip(df['Longitude'], df['Latitude'])]
+
+        # Converting to Geopandas 
+        gdf = gpd.GeoDataFrame(df, geometry=geometry)
+        # Perform a spatial join between the MultiPolygon GeoPandas DataFrame and the Point GeoPandas DataFrame
+        # result = gpd.sjoin(gdf, socio_economic_df, how="inner", op='intersects')
+        result = gdf;
+        result.reset_index(drop=True,inplace=True)
+
+        # Storing the median income - have a try and except block incase points don't lie in the census data
+        try:
+            PRE[tag]['median_income'] = result['median_income_last12months'][0]
+        except:
+            PRE[tag]['median_income'] = median_income
+            
+        #Weights assigned to convenience and number of switches in Drive mode.
+        DWC = DWS = 0
+        #Weights assigned to convenience and number of switches in Walk mode.
+        WWC = WWS = 0
+        #Weight assigned to convenience in Transit mode.
+        TWC = 0
+        #Weight assigned according to the number of switches in Transit mode. Upper bound on the number of transfers --> 7 (5 bus transfers and 2 otherwise)
+        TWS = [  0.0,
+                 0.14285714285714285,
+                 0.2857142857142857,
+                 0.42857142857142855,
+                 0.5714285714285714,
+                 0.7142857142857143,
+                 0.8571428571428571,
+                 1.0 ]
+
+        #Weight assigned to convenience in Ondemand mode.
+        OWC = 0
+        #Weight assigned according to the number of transfers in Ondemand mode. Upper bound on the number of transfers --> 7 (5 bus transfers and 2 otherwise)
+        OWS= [   0.0,
+                 0.14285714285714285,
+                 0.2857142857142857,
+                 0.42857142857142855,
+                 0.5714285714285714,
+                 0.7142857142857143,
+                 0.8571428571428571,
+                 1.0 ]
+
+        #Weight assigned to time in all modes.
+        DWT = WWT = TWT = OWT = 1
+        
+        # Weekly Income Calculation
+        daily_income = PRE[tag]['median_income'] / (52 * 7)  # Convert annual income to weekly income
+
+        # Assigning weights based on weekly income
+        DWM =  1/daily_income #weight for drive
+        TWM = cost_transit / daily_income  # Weight for transit
+        OWM = cost_microtransit / daily_income  # Weight for microtransit
+        WWM = 0
+        #Adding logistic choice weights to PRE object.
+        PRE = add_logistic_values (PRE, tag, DWT, DWM, DWC, DWS,
+                             WWT , WWM, WWC, WWS,
+                             TWT, TWM, TWC, TWS, 
+                             OWT, OWM, OWC, OWS)
+
+
+
+
+    SIZES['home_sizes'] = home_sizes
+    SIZES['work_sizes'] = work_sizes
+
+
+    # def setup_ondemand_service(PRE, NODES, LOCS, SIZES, GRAPHS, params, people_tags):
+    
+    start_time = time.time()
+    # print('starting delivery1 sources...')
+    # for i,node in enumerate(NODES['delivery1']):
+    #     if np.mod(i,200)==0: print(i)
+    #     addNodeToDF(node,'drive',GRAPHS,NDF)
+        
+    # print('starting delivery2 sources...')
+    # for i,node in enumerate(NODES['delivery2']):
+    #     if np.mod(i,200)==0: print(i)
+    #     addNodeToDF(node,'drive',GRAPHS,NDF)
+            
+    
+            
+    # # end_time = time.time()
+    # # print('time to create nodes...: ',end_time-start_time)
+    # num_people = len(people_tags);
+    # num_targets = num_people;
+
+    # if 'num_deliveries' in params:
+    #     num_deliveries = params['num_deliveries']['delivery1'];
+    #     num_deliveries2 = params['num_deliveries']['delivery2'];
+    # else:
+    num_people = len(people_tags);
+    num_deliveries =  int(num_people/10);
+    num_deliveries2 = int(num_people/10);
+
+
+    ##### k-means clustering of the population locations to see where the different ondemand vehicles should go
+    ### CHANGED TO RUN FOR PILOT REGION....
+    node_group = NODES['orig'] + NODES['dest']
+    out = kmeans_nodes(num_deliveries,'ondemand',GRAPHS,node_group); 
+    LOCS['delivery1'] = out['centers']
+    out = kmeans_nodes(num_deliveries,'ondemand',GRAPHS,node_group); 
+    LOCS['delivery2'] = out['centers']
+    
+    
+    for i,loc in enumerate(LOCS['delivery1']):
+        NODES['delivery1'].append(ox.distance.nearest_nodes(GRAPHS['ondemand'],loc[0],loc[1]));
+    for i,loc in enumerate(LOCS['delivery2']):
+        NODES['delivery2'].append(ox.distance.nearest_nodes(GRAPHS['ondemand'],loc[0],loc[1]));
+    bus_graph = GRAPHS['gtfs']; #bus_graph_wt'];
+    delivery_transit_nodes = sample(list(bus_graph.nodes()), num_deliveries2)
+    end_time = time.time();
+    print('time to setup origins & dests: ',end_time - start_time)
+    
+    print("Done setting up on-demand service")
+    
+    # return PRE, NODES, LOCS, SIZES    
+    # print("Using cost: ", cost_microtransit)
+    # directory = 'Scenario_1_new'
+    # os.makedirs(directory, exist_ok=True)
+    # sample_output_path = os.path.join(directory, 'PRE_micro_8.csv')
+    # save_PRE(PRE, sample_output_path)
+    # print("Saving PRE ...")
+    OUT = {}
+    OUT['PRE'] = PRE
+    OUT['NODES'] = NODES
+    OUT['LOCS'] = LOCS
+    OUT['SIZES'] = SIZES
+    OUT['VEHS'] = VEHS;
+
+    return OUT #PRE, NODES, LOCS, SIZES, people_tags
+
+
 def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
 
 
@@ -300,8 +1593,6 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
     BGDEFS['lon'] = BGDEFS['pt'].x;
     BGDEFS['lat'] = BGDEFS['pt'].y;
 
-
-
     #### Reading American Commuter Survey data set (pandas dataframes)
     ### information about vehicle ussage 
     VEHS = pd.read_csv('data/pop/ACSDT5Y2020.B992512-Data.csv')
@@ -322,6 +1613,8 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
     VEHS = VEHS.merge(BGDEFS,how='left',on='AFFGEOID')
     
     
+
+
 
     ### ADDING 
 
@@ -817,12 +2110,12 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
 
     # if params['num_deliveries']
 
-    if 'num_deliveries' in params:
-        num_deliveries = params['num_deliveries']['delivery1'];
-        num_deliveries2 = params['num_deliveries']['delivery2'];
-    else:
-        num_deliveries =  int(num_people/10);
-        num_deliveries2 = int(num_people/10);
+    # if 'num_deliveries' in params:
+    #     num_deliveries = params['num_deliveries']['delivery1'];
+    #     num_deliveries2 = params['num_deliveries']['delivery2'];
+    # else:
+    num_deliveries =  int(num_people/10);
+    num_deliveries2 = int(num_people/10);
 
 
     ##### kmeans clustering of the population locations to see where the different ondemand vehicles should go
@@ -880,10 +2173,10 @@ def SETUP_POPULATIONS_CHATTANOOGA(GRAPHS,cutoff_bnds = [],params={}):
 ######## ================= GENERATE WORLD ================  ###################
 
 
-class DASHBOARD:
-    def __init__(self): pass
-    def sortData(self): pass
-    def generate(self): pass
+# class DASHBOARD:
+#     def __init__(self): pass
+#     def sortData(self): pass
+#     def generate(self): pass
 
 
 class GRID:
@@ -1249,6 +2542,7 @@ class CONVERTER:
 
 
     def convertNode(self,node,from_mode,to_mode,from_type = 'graph',to_type = 'graph',verbose=False):
+
         """
         description -- converts nodes (at approx the same location) between two different graph types 
         inputs --
@@ -1409,10 +2703,6 @@ def generate_segtypes(vers): # reg1,reg2,bg
 class WORLD:
     def __init__(self,params = {},full_setup = False,verbose=True,filename=None):
 
-
-
-
-
         if not(filename==None):
             file = open(filename, 'rb')
             DATA = pickle.load(file)
@@ -1429,6 +2719,8 @@ class WORLD:
             self.factors = ['time','money','conven','switches'];
             self.modes = params['modes'];
             self.bnds = params['bnds'];
+            self.csv_file_path = params['csv_file_path'];
+
         else: 
             self.verbose = self.LOADED['OTHER']['verbose']
             self.inputparams = self.LOADED['OTHER']['inputparams']
@@ -1446,6 +2738,8 @@ class WORLD:
         ####### 
         self.NETWORKS = {}
 
+        self.all_trip_ids = [];
+
         # for mode in self.modes:
 
         if full_setup == True: 
@@ -1457,7 +2751,7 @@ class WORLD:
             self.initONDEMAND();
             self.initPEOPLE();
             self.initBACKGROUND();
-            self.initUNCONGESTED()
+            # self.initUNCONGESTED()
 
 
     def initGRAPHSnFEEDS(self): #,verbose=True):
@@ -1476,7 +2770,12 @@ class WORLD:
             if mode == 'gtfs':
                 self.GRAPHS[mode] = self.graphFromFeed(self.FEEDS['gtfs']);#,start,end) ## NEW
             elif mode == 'ondemand':
-                self.GRAPHS[mode] = ox.graph_from_place('chattanooga',network_type='drive'); #ox.graph_from_polygon(graph_boundary,network_type='drive')
+                self.GRAPHS[mode] = ox.graph_from_place('chattanooga',network_type='drive'); #
+
+
+                #ox.graph_from_polygon(graph_boundary,network_type='drive') ### UPDATE
+
+
             elif mode == 'drive' or mode == 'walk' or mode == 'bike':
                 self.GRAPHS[mode] = ox.graph_from_place('chattanooga',network_type='drive'); #ox.graph_from_polygon(graph_boundary,network_type='drive')                
 
@@ -1527,7 +2826,7 @@ class WORLD:
         self.CONVERTER = CONVERTER(params = params2);
 
 
-    def initSTATS(self):
+    def initSTATS(self,version='agrima_code'):
 
         path2 = self.groups_regions_geojson
         group_polygons = generate_polygons('from_geojson',path = path2);
@@ -1536,20 +2835,7 @@ class WORLD:
         params3 = {'num_drivers':16,'am_capacity':8, 'wc_capacity':2,
                    'start_time' : 0,'end_time' : 3600*4.}
         self.driversDF = {group: createDriversDF(params3,WORLD) for group in list(self.grpsDF['group'])}
-        self.DELIVERYDF = {'grps':self.grpsDF,'drivers':self.driversDF}              
-
-    
-        # def generatePopulation(GRAPHS,DELIVERY,WORLD,NODES,VEHS,LOCS,PRE,params,verbose=True):  ##### ADDED TO CLASS
-
-        # modes = ['drive','transit','ondemand','walk','gtfs']
-        # params = {}
-        # params['modes'] = modes; params['graphs'] = graphs;
-        # params['nodes'] = nodes; params['factors'] = factors; params['mass_scale'] = 1; # 4./3600.
-        # asdf = generatePopulation(GRAPHS,DELIVERY,WORLD,NDF,VEHS,LOCS,PRE,params,verbose = True);
-
-        # PEOPLE = asdf;
-        # print('Number of agents:',num_people)
-        # updateNodesDF(NDF);
+        self.DELIVERYDF = {'grps':self.grpsDF,'drivers':self.driversDF}
 
 
         #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- 
@@ -1606,7 +2892,101 @@ class WORLD:
         params['eps_filterODs'] = 0.001
         cutoff_bnds = bnds;
         # cutoff_bnds = [];
-        OUT = SETUP_POPULATIONS_CHATTANOOGA(self.GRAPHS,cutoff_bnds = cutoff_bnds, params=params);
+
+        if version == 'dan_code':
+            OUT = SETUP_POPULATIONS_CHATTANOOGA(self.GRAPHS,cutoff_bnds = cutoff_bnds, params=params);
+        #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- 
+        #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- 
+        #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- #### ---- 
+        if version == 'agrima_code':
+
+
+
+
+
+
+            #### initial parameters...
+            if 'pop_cutoff' in  params: pop_cutoff = params['pop_cutoff'];
+            else: pop_cutoff = 30;
+
+            if 'OD_version' in  params: OD_version = params['OD_version']
+            else: OD_version = 'basic'
+
+            SEG_TYPES = params['SEG_TYPES'];
+            
+
+            # for i,samp in enumerate(samps):
+            #     tag = 'person'+str(i);
+            zzgraph = self.GRAPHS['all']
+            
+            temp = [Point(n['x'],n['y']) for i,n in zzgraph.nodes(data=True)]
+            temp2 = np.array([[n['x'],n['y']] for i,n in self.GRAPHS['all'].nodes(data=True)])
+            minz = np.min(temp2,0); maxz = np.max(temp2,0);
+                # zzgraph.nodes(data=True)])
+            # use_box = True;
+            # if use_box:
+            #     minz = np.min(temp2,0); maxz = np.max(temp2,0);
+            #     dfz = maxz-minz; centerz = minz + 0.5*dfz;
+            #     skz = 0.9;
+            #     pts = 0.5*np.array([[dfz[0],dfz[1]],[-dfz[0],dfz[1]],[-dfz[0],-dfz[1]],[dfz[0],-dfz[1]]]) + centerz;
+            #     points = [Point(zz[0],zz[1]) for i,zz in enumerate(pts)]
+            #     temp = temp + points;
+            # graph_boundary = gpd.GeoSeries(temp).unary_union.convex_hull
+            
+            # cornersz = np.array([[maxz[0],maxz[1]],[minz[0],maxz[1]],[minz[0],minz[1]],[maxz[0],minz[1]]]);
+            # #corners = np.array([[1,1],[-1,1],[-1,-1],[1,-1]])
+            # divx = 40; divy = int(divx*(dfz[1]/dfz[0]));
+            # ptBnds = ptsBoundary(cornersz,[divx,divy,divx,divy])
+            # # plt.plot(ptBnds[:,0],ptBnds[:,1],'o')
+
+
+
+
+
+
+
+
+
+
+
+            ### Reading in the loads data set... (pandas dataframes)
+            #asdf0 = pd.read_parquet('data/pop/lodes_combinations_upd.parquet')
+            # asdf0.head()
+            
+            ##### forget what this does.... 
+            BGDEFS = pygris.block_groups(state = "TN", county="Hamilton", cb = True, cache=True)
+            BGDEFS['pt']  = BGDEFS['geometry'].representative_point()
+            BGDEFS['lon'] = BGDEFS['pt'].x;
+            BGDEFS['lat'] = BGDEFS['pt'].y;
+
+            #### Reading American Commuter Survey data set (pandas dataframes)
+            ### information about vehicle ussage 
+
+
+
+
+            #### Reading American Commuter Survey data set (pandas dataframes)
+            ### information about vehicle ussage 
+            VEHS = pd.read_csv('data/pop/ACSDT5Y2020.B992512-Data.csv')
+            # BGDEFS['AFFGEOID']
+            #VEHS = VEHS.rename(columns={'B992512_001E':'from_cbg','home_geo':'from_geo','w_geocode':'to_cbg','work_geo':'to_geo'}).drop(columns=['return_time'])[['from_cbg', 'to_cbg', 'total_jobs', 'go_time', 'from_geo', 'to_geo']]
+            VEHS = VEHS.rename(columns={'GEO_ID':'AFFGEOID','B992512_001E':'workers','B992512_002E':'wout_cars','B992512_003E':'w_cars'}).drop(columns=['B992512_001EA','B992512_002EA','B992512_003EA','Unnamed: 8'])
+            VEHS = VEHS.drop([0])
+            ### computing the percentage of workers with and without cars... (within pandas)
+            VEHS['workers'] = pd.to_numeric(VEHS['workers'],errors='coerce')
+            VEHS['wout_cars'] = pd.to_numeric(VEHS['wout_cars'],errors='coerce')
+            VEHS['w_cars'] = pd.to_numeric(VEHS['w_cars'],errors='coerce')
+            VEHS['percent_w_cars'] = VEHS['w_cars']/VEHS['workers'];
+            VEHS['percent_wout_cars'] = VEHS['wout_cars']/VEHS['workers'];
+            VEHS = VEHS.merge(BGDEFS,how='left',on='AFFGEOID')
+            self.VEHS = VEHS
+            self.SEG_TYPES = generate_segtypes('reg6') # reg1,reg2,bg
+
+            OUT = CONVERT_CSV_TO_PRE_FORMAT(self.GRAPHS,self.VEHS, self.SEG_TYPES, minz, maxz, self.csv_file_path)
+
+
+
+
 
         self.OUT = OUT;
         self.PRE = OUT['PRE'];
@@ -1670,7 +3050,11 @@ class WORLD:
                 self.FEEDS,
                 self.NETWORKS,
                 self.ONDEMAND,
-                self.PRE,{'modes':self.modes,'factors':self.factors})
+                self.PRE,
+                {'modes':self.modes,'factors':self.factors},
+                len(self.all_trip_ids)
+                )
+            self.all_trip_ids = self.all_trip_ids + self.PEOPLE[person].trip_ids;
 
     def initBACKGROUND(self):
         file = open(self.preloads_file, 'rb')
@@ -1814,19 +3198,16 @@ class WORLD:
         return graph1
 
 
-    def generateDashboard(self):
-        pass
-    def printDashboard(self):
-        pass
-
-
     ###### LOADING BACKGROUND EDGE DATA ###### LOADING BACKGROUND EDGE DATA ###### LOADING BACKGROUND EDGE DATA 
     ###### LOADING BACKGROUND EDGE DATA ###### LOADING BACKGROUND EDGE DATA ###### LOADING BACKGROUND EDGE DATA 
 
-    def RUN(self,num_iters = 1,restart=True):
+    def SIM(self,num_iters = 1,restart=True):
 
 
         # self.add_base_edge_masses(self.GRAPHS,self.NETWORKS,WORLD0);
+
+        if restart:
+            self.initUNCONGESTED()
 
         mode = 'ondemand'
         # poly = np.array([-6120.8676711, 306.5130127])
@@ -2036,8 +3417,250 @@ class WORLD:
 #     WORLD['main']['alpha'] = 10./(WORLD['main']['iter']+1.);
 #     # WORLD['main']['alpha'] = 10.;
 
+    def saveOutputs(self,filename):
+
+        # count = 0;
+        # file_created=False;
+
+        # month_names = {1:'Jan',2:'Feb',3:'Mar',4:'Apr',
+        #                5:'May',6:'Jun',7:'Jul',8:'Aug',
+        #                9:'Sept',10:'Oct',11:'Nov',12:'Dec'}
+ 
+        # day = str(datetime.now().day)
+        # month = month_names[datetime.now().month]
+        # count = 0;
+        # tag_to_add = '';
+        # free_slot_found = False;
+        # while  free_slot_found == False:
+        #     print(count)
+        #     possible_path = filename + tag_to_add; #'run' +str(count)+'_'+month+day
+        #     if os.path.exists(possible_path):
+        #         count = count + 1;
+        #         tag_to_add = '_'+str(count+1);
+        #     else:
+        #         free_slot_found = True;
+        #         output_path = possible_path;
+        output_path = filename;
+        os.mkdir(output_path)
+        for mode in self.modes:
+            self.OUTPUTS['by_mode'][mode].to_parquet(output_path+'/mode_' + mode + '.parquet')
+        self.OUTPUTS['ondemand'].to_parquet(output_path+'/ondemand_driver_runs'+'.parquet')
+
+
+
 
     def generateOutputs(self):
+
+        ##### INITIALIZING 
+        self.OUTPUTS = {};
+        self.OUTPUTS['by_mode'] = {};
+        for _,mode in enumerate(self.modes):
+            colheads = []
+            colheads = colheads + ['seg_id','mode','trip_ids']
+            colheads = colheads + ['start_node','end_node','start_loc','end_loc'];
+            colheads = colheads + ['people'];
+            colheads = colheads + ['distance','travel_time','money','switches']
+            colheads = colheads + ['uncongested_distance','uncongested_travel_time']
+            if mode == 'ondemand':
+                colheads = colheads + ['group_id','run_id'];
+                colheads = colheads + ['pickup_time_start','pickup_time_end','dropoff_time_start','dropoff_time_end']
+                colheads = colheads + ['pickup_time_scheduled','dropoff_time_scheduled']
+                colheads = colheads + ['pickup_time','dropoff_time']
+                colheads = colheads + ['num_passengers']
+
+            if mode == 'gtfs':
+                colheads = colheads + ['line_id','bus_trip_id'];
+            self.OUTPUTS['by_mode'][mode] = pd.DataFrame({col:[] for col in colheads},index = [])
+        
+        for _,mode in enumerate(self.modes):
+            NETWORK = self.NETWORKS[mode]
+            GRAPH = self.GRAPHS[mode];
+            active_segs = NETWORK.active_segs;
+            all_segs = list(NETWORK.segs);
+            SEGS = NETWORK.segs
+
+
+            for seg in SEGS:
+                SEG = SEGS[seg];
+
+                DATA = {};
+                DATA['seg_id'] = [SEG.seg_id];
+                DATA['trip_ids'] = [SEG.trip_ids];
+                DATA['mode'] = mode;
+                if hasattr(SEG,'people'): DATA['people'] = [SEG.people]
+                else: DATA['people'] = [None];
+                    
+                DATA['start_node'] = [seg[0]];
+                DATA['end_node'] = [seg[1]];
+
+                start_loc = (GRAPH.nodes[seg[0]]['x'],GRAPH.nodes[seg[0]]['y'])
+                end_loc = (GRAPH.nodes[seg[1]]['x'],GRAPH.nodes[seg[1]]['y'])
+
+                DATA['start_loc'] = [start_loc];
+                DATA['end_loc'] = [end_loc];
+
+
+                if seg in active_segs: DATA['active'] = True;
+                else: DATA['active'] = False;
+
+
+                # if 'current_dist' in SEG.costs:
+                DATA['distance'] = [SEG.costs['current_dist']]
+                # if 'current_conven' in SEG.costs:
+                DATA['current_conven'] = [SEG.costs['current_conven']]    
+                DATA['travel_time'] = [SEG.costs['current_time']]
+                DATA['money'] = [SEG.costs['current_money']]
+                DATA['switches'] = [SEG.costs['current_switches']]
+                # NEWDATA['conven'] = [SEG.costs['current_conven']]
+
+                    
+                    
+                if hasattr(SEG,'uncongested'):
+                    if 'costs' in SEG.uncongested:
+                        if 'dist' in SEG.uncongested['costs']:
+                            DATA['uncongested_distance'] = [SEG.uncongested['costs']['dist']]
+                        DATA['uncongested_travel_time'] = [SEG.uncongested['costs']['time']]
+                else:
+                    if 'dist' in SEG.uncongested['costs']:
+                        DATA['uncongested_distance'] = [DATA['dist']] 
+                    DATA['uncongested_travel_time'] = [DATA['time']]
+                
+                if mode == 'gtfs':
+                    if hasattr(SEG,'line_id'): DATA['line_id'] = SEG.line_id
+                    if hasattr(SEG,'bus_trip_id'): DATA['bus_trip_id'] = SEG.bus_trip_id
+
+                if mode == 'ondemand':
+                    # if False:
+                    DATA['run_id'] = [SEG.run_id];
+                    DATA['group_id'] = [SEG.group];
+
+                    if hasattr(SEG,'pickup_time_scheduled'):
+                        pickup_time_scheduled = SEG.pickup_time_scheduled;
+                        dropoff_time_scheduled = SEG.dropoff_time_scheduled;
+                        num_passengers = SEG.num_passengers;
+                    else:
+                        pickup_time_scheduled = SEG.pickup_time_window_start;
+                        dropoff_time_scheduled = SEG.dropoff_time_window_start;
+                        num_passengers = 1;
+
+                    DATA['pickup_time_scheduled'] = [pickup_time_scheduled];
+                    DATA['dropoff_time_scheduled'] = [dropoff_time_scheduled];
+                    DATA['pickup_time'] = [pickup_time_scheduled];
+                    DATA['dropoff_time'] = [dropoff_time_scheduled];
+                    DATA['num_passengers'] = [num_passengers];
+
+                    DATA['group_id'] = [SEG.group];
+                    DATA['booking_id'] = [SEG.booking_id];
+                    DATA['pickup_time_start'] = [SEG.pickup_time_window_start];
+                    DATA['pickup_time_end'] = [SEG.pickup_time_window_end];
+                    DATA['dropoff_time_start'] = [SEG.dropoff_time_window_start];
+                    DATA['dropoff_time_end'] = [SEG.dropoff_time_window_end];
+                self.OUTPUTS['by_mode'][mode] = pd.concat([self.OUTPUTS['by_mode'][mode],pd.DataFrame(DATA)],ignore_index=True);
+            
+        ###########################################################################################
+        ###########################################################################################
+        ###########################################################################################
+        ###########################################################################################
+
+
+        tag = 'ondemand'
+        colheads = [];
+        colheads = colheads + ['group_id','run_id'];
+        colheads = colheads + ['VMT','PMT','VMT/PMT'];
+        colheads = colheads + ['VTT','PTT','VTT/PTT'];
+        # colheads = colheads + ['distance','travel_time','money']
+        colheads = colheads + ['total_passengers','max_num_passengers','ave_num_passengers'];
+        self.OUTPUTS[tag] = pd.DataFrame({col:[] for col in colheads},index = [])
+
+
+        GROUPS = self.ONDEMAND.groups;
+
+        for group in GROUPS:
+            GROUP = GROUPS[group];
+            for run in GROUP.runs:
+                RUN = GROUP.runs[run];
+                DATA = {};
+                DATA['group_id'] = [GROUP.group]
+                DATA['run_id'] = [RUN.run_id]
+                DATA['VMT'] = [RUN.current_VMT]
+                DATA['PMT'] = [RUN.current_PMT]
+                DATA['VMT/PMT'] = [RUN.current_VMTbyPMT]
+                DATA['VTT'] = [RUN.current_VTT];
+                DATA['PTT'] = [RUN.current_PTT];
+                DATA['VTT/PTT'] = [RUN.current_VTTbyPTT];
+
+                # DATA['distance'] = [RUN.costs['current_dist']];
+                # DATA['travel_time'] = [RUN.costs['current_time']];
+                # DATA['money'] = [RUN.costs['current_money']];
+
+                DATA['total_passengers'] = [RUN.total_passengers];
+                DATA['max_num_passengers'] = [RUN.max_num_passengers];
+                DATA['ave_num_passengers'] = [RUN.ave_num_passengers];
+                self.OUTPUTS[tag]= pd.concat([self.OUTPUTS[tag],pd.DataFrame(DATA)],ignore_index=True);
+
+
+            # print(GROUP.driver_runs)
+            # print('')
+
+            # print(list(vars(GROUP)))
+
+            # asdfasdfs
+
+
+
+        # if False: 
+        #     for _,mode in enumerate(self.modes):
+        #         DF = pd.DataFrame(COLHEADERS,index=[])
+        #         active_segs = self.NETWORKS[mode].active_segs;
+        #         all_segs = list(self.NETWORKS[mode].segs);
+        #         SEGS = self.NETWORKS[mode].segs
+        #         for seg in SEGS:
+        #             SEG = SEGS[seg];
+
+        #             NEWDATA = {};
+        #             if hasattr(SEG,'people'): NEWDATA['people'] = SEG['people']
+        #             else: NEWDATA['people'] = [None];
+        #             NEWDATA['start_node'] = [seg[0]];
+        #             NEWDATA['end_node'] = [seg[1]];
+        #             if seg in active_segs: NEWDATA['active'] = True;
+        #             else: NEWDATA['active'] = False;
+
+        #             NEWDATA['mode'] = [mode]
+        #             NEWDATA['time'] = [SEG.costs['current_time']]
+        #             NEWDATA['money'] = [SEG.costs['current_money']]
+        #             NEWDATA['switches'] = [SEG.costs['current_switches']]
+        #             # NEWDATA['conven'] = [SEG.costs['current_conven']]
+        #             if hasattr(SEG,'uncongested'):
+        #                 if 'costs' in SEG.uncongested:
+        #                     NEWDATA['uncongested_time'] = [SEG.uncongested['costs']['time'][-1]]
+        #                 # NEWDATA['uncongested_money'] = [SEG.uncongested['costs']['money']]
+        #             else: 
+        #                 NEWDATA['uncongested_time'] = NEWDATA['time']
+        #                 # NEWDATA['uncongested_money'] = NEWDATA['money']
+        #             if mode == 'ondemand':
+        #                 if hasattr(SEG,'group'): NEWDATA['group'] = [SEG.group];
+        #                 if hasattr(SEG,'run_id'): NEWDATA['runid'] = [SEG.run_id];
+        #                 if hasattr(SEG,'num_passengers'): NEWDATA['num_passengers'] = [SEG.num_passengers];
+        #                 if hasattr(SEG,'pickup_time_window_start'): NEWDATA['pickup_time'] = [SEG.pickup_time_window_start]
+        #                 if hasattr(SEG,'dropoff_time_window_start'): NEWDATA['dropoff_time'] = [SEG.dropoff_time_window_start]
+        #                 NEWDATA['num_other_passengers'] = 0; 
+
+
+
+        #             NEWDF = pd.DataFrame(NEWDATA)
+        #             DF = pd.concat([DF,NEWDF], ignore_index = True)            
+        #     self.OUTPUTS['PEOPLE'] = DF.copy();
+
+
+###########################################################################################
+###########################################################################################
+###########################################################################################
+###########################################################################################
+###########################################################################################
+
+
+
+    def generateOutputs2(self):
 
         colheaders = ['people']
         colheaders = colheaders + ['time','money','switches','conven'];
@@ -2083,8 +3706,8 @@ class WORLD:
                     if 'costs' in SEG.uncongested:
                         NEWDATA['money0'] = [SEG.uncongested['costs']['money']]
                 else: 
-                    NEWDATA['time0'] = NEWDATA['time']
-                    NEWDATA['money0'] = NEWDATA['money']
+                    NEWDATA['time0'] = [NEWDATA['time']]
+                    NEWDATA['money0'] = [NEWDATA['money']]
                 
                 if mode == 'ondemand':
                     if hasattr(SEG,'group'): NEWDATA['group'] = [SEG.group];
@@ -2150,6 +3773,8 @@ class WORLD:
         self.OUTPUTS['PEOPLE'] = DF.copy();
 
 
+
+
         ####################################################################################################
         ####################################################################################################
 
@@ -2205,6 +3830,14 @@ class WORLD:
 
     def SAVE(self,filename):
 
+        # folder = 'runs/'
+        # filename = 'data_version1.obj'
+        # folder = 'runs/'
+        # filename = 'data_version1.obj'
+        # # fileObj = open(folder+filename, 'wb')
+        # # pickle.dump(BLAH,fileObj)
+        # # fileObj.close()
+
         fileObj = open(filename, 'wb')                    
         DATA = {};
         # if hasattr(self,'CONVERTER'): DATA['CONVERTER'] = self.CONVERTER
@@ -2226,6 +3859,15 @@ class WORLD:
 
 
     def LOAD(self):
+
+
+        # folder = 'runs/'
+        # filename = 'data_version1.obj'
+        # folder = 'runs/'
+        # filename = 'data_version1.obj'
+        # # fileObj = open(folder+filename, 'wb')
+        # # pickle.dump(BLAH,fileObj)
+        # # fileObj.close()        
 
         reload_data = True;
         #filename = 'data/data1176.obj'
@@ -2285,23 +3927,1219 @@ class WORLD:
             PEOPLE = asdf;
 
 
+    def generateDashboard(self):
+        pass
+    def printDashboard(self):
+        pass
+
+
+
+# class STATICPLOTS:
+#     def __init__(self):
+
+# %load_ext autoreload
+# %autoreload 2
+# from multimodal_functions import * 
+
+# compute_UncongestedEdgeCosts(WORLD,GRAPHS)
+# compute_UncongestedTripCosts(WORLD,GRAPHS)
+
+# # datanames = ['full','2regions','4regions','small','tiny'];
+# #datanames = ['large1']; #,'medium1','small1','tiny1'];
+# datanames = ['regions2','regions4','regions7','tiny1']
+# filenames = {name:name+'.obj' for name in datanames}
+# folder = 'runs/'
+
+# print('COMPUTING DATA FOR DASHBOARD...')
+# # DATA = computeData(WORLD,GRAPHS,DELIVERY)
+# DATAS = loadDataRuns(folder,filenames,GRAPHS);
+
+# # mode = 'gtfs';
+# # subplot_tags = datanames;
+# data_tags = ['regions2','regions4','regions7','tiny1']
+# use_active = True; 
+
+# import plotly
+# import plotly.express as px
+# import plotly.graph_objects as go
+# import skimage.io as sio
+# from PIL import Image, ImageSequence
+# import numpy as np
+# import os
+
+# from plotly.subplots import make_subplots
+# import numpy as np
+# from numpy import pi, sin, cos
+
+# modes = ['drive','walk','gtfs','ondemand']
+
+# high_colors = {'drive':[1,0,0,1],'walk':[1,1,0,1],'gtfs':[1,0.5,0.,1],'ondemand':[0,0,1,1]}
+# colors = {'drive':[1,0,0,1],'walk':[1,1,0,1],'gtfs':[1,0.5,0.,1],'ondemand':[0,0,1,1],
+#           'groups':[[0,0,1,1],[0.5,0,1,1],[0.5,0,1,1],[0.5,0,1,1],[0.5,0,1,1],[0.5,0,1,1],[0.5,0,1,1],[0.5,0,1,1]],
+#           'time':[1,0,0,1],'money':[0,0.8,0.,1.],'conven':[0,0,1,1],'switches':[0,0,0,1]}
+# row_inds = {'drive':1,'walk':2,'gtfs':3,'ondemand':4};
+
+
+
+# for mode in modes:
+#     dims = [1000,400];
+#     if mode == 'ondemand':
+#         dims = [1000,400];
+#         SUBPLOTS = [{'tag':'time','title':"Travel Time",'inds':(1,1)},
+#                     {'tag':'time/dtime','title':"Time/(Direct Time)",'inds':(1,2)},
+#                     {'tag':'money','title':'Monetary Cost','inds':(1,3)},
+#                     {'tag':'overlap','title':'Passenger Overlap','inds':(1,4)}]
+#                     # {'tag':'VDM','title':'VDM','inds':(1,5)},
+#                     # {'tag':'VMT/PMT','title':'VMT/PMT','inds':(1,6)}]
+#     elif mode == 'gtfs':
+#         dims = [1000,400];
+#         SUBPLOTS = [{'tag':'time','title':"Travel Time",'inds':(1,1)},
+#                     {'tag':'money','title':'Monetary Cost','inds':(1,2)},
+#                     {'tag':'transfers','title':'Bus Transfers','inds':(1,3)}]
+#     elif mode == 'walk':
+#         dims = [400,400];
+#         SUBPLOTS = [{'tag':'time','title':"Travel Time",'inds':(1,1)}]
+#     else:
+#         dims = [1000,400];
+#         SUBPLOTS = [{'tag':'time','title':"Travel Time",'inds':(1,1)},
+#                     {'tag':'time/dtime','title':"Time/(Direct Time)",'inds':(1,2)},
+#                     {'tag':'money','title':'Monetary Cost','inds':(1,3)}]
+        
+#     subplot_titles = [SUBPLOT['title'] for SUBPLOT in SUBPLOTS];
+    
+#     num_rows = 1; num_cols = len(subplot_titles); 
+#     bot_row_specs = [[{'t':0.01,'b':0.01,'r':0.02,'l':0.02} for _ in range(num_cols)] for _ in range(num_rows)];
+#     subplots_shape =  bot_row_specs;
+    
+#     row_heights = list(0.1*np.ones(len(bot_row_specs))); col_widths = list(0.3*np.ones(len(bot_row_specs[0])))
+    
+    
+    
+#     fig = make_subplots(rows=len(subplots_shape), cols = len(subplots_shape[0]),
+#                         column_widths = col_widths,row_heights = row_heights,
+#                         horizontal_spacing=0.0,vertical_spacing=0.0,
+#                         subplot_titles=subplot_titles,
+#                         specs=subplots_shape,print_grid=True);
+    
+    
+    
+#     fig.update_layout(width=dims[0],height=dims[1],boxmode='group'); #, xaxis_visible=False, yaxis_visible=False)
+#     color = px.colors.label_rgb(list(255*np.array(colors[mode])))
+#     edgecolor = 'rgb(0,0,0)';    
+    
+#     for SUBPLOT in SUBPLOTS:
+#         title = SUBPLOT['title'];
+#         tag = SUBPLOT['tag'];
+#         inds = SUBPLOT['inds'];
+#         for i,name in enumerate(data_tags): #enumerate(DATAS):
+#             DATA = DATAS[name]
+#             DF0 = DATA[mode]['DF'];
+#             opac = 0.7;
+            
+#             if tag == 'time':
+#                 DF = DF0.copy();
+#                 col = 'time';
+#                 if use_active: DF = DF[DF['active']==True];
+#                 DF = DF[DF[col]<=1000000];
+#                 VALS = DF[col]; series_name = name; boxpoints = 'all'
+#                 fig.add_traces(go.Box(y=VALS,fillcolor=color,opacity=opac,marker_color=edgecolor,boxpoints=boxpoints,width=0.4,line={'width':1},name=series_name),inds[0],inds[1]);
+#             ###########
+    
+#             if tag == 'time/dtime':
+#                 DF = DF0.copy();
+#                 col = 'time';
+#                 if use_active: DF = DF[DF['active']==True];
+#                 DF = DF[DF[col]<=1000000];
+#                 VALS = DF['time']/DF['time0']; series_name = name; boxpoints = 'all'
+#                 fig.add_traces(go.Box(y=VALS,fillcolor=color,opacity=opac,marker_color=edgecolor,boxpoints=boxpoints,width=0.4,line={'width':1},name=series_name),inds[0],inds[1]);
+#             ###########
+#             if tag == 'money':
+#                 DF = DF0.copy();
+#                 col = 'money';
+#                 if use_active: DF = DF[DF['active']==True];
+#                 DF = DF[DF[col]<=1000000];
+#                 VALS = DF['money']; series_name = name; boxpoints = 'all'
+#                 fig.add_traces(go.Box(y=VALS,fillcolor=color,opacity=opac,marker_color=edgecolor,boxpoints=boxpoints,width=0.4,line={'width':1},name=series_name),inds[0],inds[1]);
+#             ###########
+#             if tag == 'overlap':
+#                 DF = DF0.copy();
+#                 col = 'num_passengers';
+#                 if use_active: DF = DF[DF['active']==True];
+#                 DF = DF[DF[col]<=1000000];
+#                 VALS = DF[col]; series_name = name; boxpoints = 'all'
+#                 fig.add_traces(go.Box(y=VALS,fillcolor=color,opacity=opac,marker_color=edgecolor,boxpoints=boxpoints,width=0.4,line={'width':1},name=series_name),inds[0],inds[1]);
+#             ###########
+    
+#             if tag == 'transfers':
+#                 DF = DF0.copy();
+#                 col = 'switches';
+#                 if use_active: DF = DF[DF['active']==True];
+#                 DF = DF[DF[col]<=1000000];
+#                 DF = DF[DF[col]>=0.0];
+#                 VALS = DF[col]; series_name = name; boxpoints = 'all'
+#                 fig.add_traces(go.Box(y=VALS,fillcolor=color,opacity=opac,marker_color=edgecolor,boxpoints=boxpoints,width=0.4,line={'width':1},name=series_name),inds[0],inds[1]);
+#             ###########
+
+    
+    
+#     fig.update_layout(showlegend=False)
+#     fig.show()
+
+#     fig.write_image('./figs/static/' + mode+"_static_data.png"); #,engine="kaleido")
+#     # plotly.image.save_as(fig, filename='file.png')
+
+
+
+
+
+# class TRACE:
+#     def __init__(self):
+#         self.image = None;
+#         self.tags = None;
+#         self.datas = {'data1':{'tag':None,'x':None,'y':None},
+#                       'data2':{'tag':None,'x':None,'y':None}}
+#         self.datax = None;
+#         self.datay = None;
+#         self.dataind = None;
+#         self.DF = None;
+#         self.sliders 
+
+
+# class BUTTON:
+#     def __init__(self):
+#         pass
+
+# class SLIDER:
+#     def __init__(self):
+        
+#         self.x = 0;
+#         self.y = 0;
+#         self.length = None;
+#         self.xanchor = "left"
+#         self.yanchor = "top"
+#         self.active = 0;
+#         self.currentvalue = {};
+#         self.pad = {'t':0,'b':0,'r':0,'l':0}
+#         self.steps = []
+#         self.datainds = []
+#         self.num_steps = 0;
+#         # for i in range(self.num_steps):
+#         #     step = dict(method="update",label='',args=[{'visible':[]},{},[]]);
+#         #     self.steps.append(step)
+
+#     def addStep(self,sliderind,dataind):
+
+#         if self.num_steps < sliderind + 1:
+#             new_num_steps = sliderind + 1;
+#             diff_size = new_num_steps - self.num_steps;
+#             self.datainds = self.datainds + [None * diff_size];
+#             for i in range(new_num_steps):
+#                 if i < self.num_steps:
+#                     STEP = self.steps[i]
+#                     STEP['args'][0]['visible'] = STEP['args'][0]['visible'] + [False * diff_size];
+#                     STEP['args'][2] = STEP['args'][2] + [None * diff_size];
+#                 else:
+#                     STEP = dict(method="update",label='',args=[{'visible':[False*new_num_steps]},{},[None*new_num_steps]]);
+#                     self.steps.append(STEP)
+
+#         self.num_steps = new_num_steps:
+#         for i in range(self.num_steps):
+#             STEP = self.steps[i]
+#             STEP['args'][0]['visible'][sliderind] = True;
+#             STEP['args'][2][sliderind] = dataind;
+#         self.datainds[sliderind] = dataind            
+
+#     def write(self):
+#         out = dict(x=self.x,y=self.y,len=self.length,xanchor=self.xanchor,yanchor=self.yanchor,active=self.active,currentvalue={},pad=self.pad,steps=self.steps)
+#         return out
+
+#         pass
+
+#     len2 = len(datainds2);
+#     datainds = datainds1 + datainds2; 
+#     tag2 = group + '_runs';
+#     loc = CTRL_LOCS[tag2]
+#     if len(loc)>=3: length = loc[2];
+#     else: length = 0.2;
+#     SLIDERS.append(dict(x=loc[0],y=loc[1],len=length,xanchor="left",yanchor="top",active=0,currentvalue={},pad={"t": 0},steps=steps))
+
+
+# for tag in groups: #['group0','group1']: 
+#     ### NEW
+#     steps = []    
+#     datainds1 = []; datainds2 = [];
+#     TAGS = DATAINDS2['imgs']['groups'][tag];
+#     for tag2 in TAGS:
+#         try: datainds1.append(DATAINDS2['imgs']['groups'][tag][tag2])
+#         except: pass
+#         try: datainds2.append(DATAINDS2['bars']['groups'][tag][tag2]);
+#         except: pass
+#     datainds = datainds1 + datainds2
+#     len1 = len(datainds1); len2 = len(datainds2);
+
+#     if len2>0:
+#         print('len1: ',len1)
+#         print('len2: ',len2)
+#         for i in range(len2):
+#             step = dict(method="update",label='',args=[{"visible": [False] * (len1+len2)},{},datainds])
+#             step["args"][0]["visible"][i] = True  
+#             step["args"][0]["visible"][len1+i] = True  
+#             steps.append(step)
+#         loc = CTRL_LOCS[tag]
+#         if len(loc)>=3: length = loc[2];
+#         else: length = 0.2;
+#         SLIDERS.append(dict(x=loc[0],y=loc[1],len=length,xanchor="left",yanchor="top",active=0,currentvalue={},pad={"t": 0},steps=steps))
+
+
+# for tag0 in ['walk','drive','gtfs']: #,'ondemand_trips']:
+#     # NEW
+    
+#     datainds1 = []; datainds2 = [];
+#     dataindsn = {};
+#     tag = tag0 + '_trips'
+#     TAGS = DATAINDS2['imgs'][tag];
+#     lenn = []
+#     for tag2 in TAGS:
+#         try: datainds1.append(DATAINDS2['imgs'][tag0 + '_trips'][tag2])
+#         except: pass
+#     for factor in use_factors:
+#         dataindsn[factor] = []
+#         for tag2 in TAGS:
+#             dataindsn[factor].append(DATAINDS2['bars'][tag0 + '_trips_' + factor][tag2]);
+#         lenn.append(len(dataindsn[factor]));
+
+#     datainds = datainds1
+#     for factor in use_factors:
+#         datainds = datainds + dataindsn[factor]
+#     len1 = len(datainds1);  len2 = len(datainds2);
+
+#     # if lenn[0]>0
+#     # print('1: ',datainds1)
+#     # print('time: ' ,dataindsn['time'])
+#     # print('money: ',dataindsn['money'])
+#     # print(datainds)
+
+#     if len1 > 0: 
+#         steps = []
+#         for i in range(len1):
+#             step = dict(method="update",label='',args=[{"visible": [False] * (len1+np.sum(lenn))},{},datainds])
+#             step["args"][0]["visible"][i] = True  
+#             for k,factor in enumerate(use_factors):
+#                 step["args"][0]["visible"][len1 + int(np.sum(lenn[:k])) + i] = True  
+#             steps.append(step)
+            
+#         loc = CTRL_LOCS[tag]
+#         if len(loc)>=3: length = loc[2];
+#         else: length = 0.2;
+#         SLIDERS.append(dict(x=loc[0],y=loc[1],len=length,xanchor="left",yanchor="top",
+#                             active=0,currentvalue={},pad={"t": 0},steps=steps))    
+
+
+# print('building buttons...')
+# BUTTONS = [];
+# for tag in ['lines','source','target','drive','gtfs','walk','ondemand']: 
+#     loc = CTRL_LOCS[tag];
+#     # print(DATAINDS[tag])
+#     BUTTONS.append(dict(
+#             buttons=list([
+#                 dict(args=[{"visible":True},{},[DATAINDS2['imgs'][tag]]],label=tag + " ON" ,method="update"),
+#                 dict(args=[{"visible":False},{},[DATAINDS2['imgs'][tag]]],label=tag + " OFF",method="update")]),
+#             # type = "buttons",
+#             direction="down",
+#             pad={"r": 0, "t": 0},
+#             showactive=True,x=loc[0],xanchor="left",y=loc[1],yanchor="top"));
+
+
+
+# print('adding controls...')
 
 
 
 
 
 
+# fig.update_layout(showlegend=False)
+
+# # fig.update_layout(xaxis_visible=False, yaxis_visible=False)
+
+# # fig.update_layout(autosize=True,
+# #     height=600,
+# #     width=500,
+# #     margin=dict(l=0,r=0,t=20,b=0),
+# #     grid = {'rows': 2, 'columns': 1, 'pattern': "independent"})
+
+# # fig.update_layout(column_widths = [400,300],row_heights = [800,300])
+
+
+
+# print('showing...')
+# fig.show()
+
+# print('done showing.')
+
+# import plotly.io as pio
+# pio.write_html(fig, file='case3.html', auto_open=True)
+
+
+# class SUBPLOT: 
+#     def __init__(self,params={}):
 
 
 
 
 
+#         self.subplot = None;
+#         self.size = (100,100)
+#         self.pads = (2,2)
+#         self.grid_loc = ()
+#         self.grid_exts = (1,1)
+#         self.margins = (2,2)
+#         if 'subplot' in params: self.subplot = params['subplot'];
+#         if 'size' in params: self.size = params['size'];
+#         if 'grid_loc' in params: self.grid_loc = params['grid_loc'];
+#         if 'grid_exts' in params: self.grid_exts = params['grid_exts'];
+#         if 'pads' in params: self.pads = params['pads'];
+#         if 'margins' in params: self.margins = params['margins'];
+
+
+#         sefl
+
+#     def sort(self):
+#         pass
+
+# class SUBCTRL:
+#     def __init__(self):
+#         pass
+
+# class SUBGROUP:
+#     def __init__(self):
+#         self.PLOTS = None
+#         self.CTRLS = None
+#         pass
 
 
 
 
 
+# num_groups = len(groups);   
 
+# num_fig_rows = 3;
+# num_fig_cols = num_groups
+
+
+# aspect_ratio = 1540./1400.;
+# fac = 1.3;
+# height = fac*800; width = fac*1000; fig_col_width_perc = 0.5;
+# bot_row_height = 200; #height - fig_row_height;
+# fig_col_width = fig_col_width_perc * width;
+# fig_row_height = (1./aspect_ratio) * fig_col_width;
+
+
+# right_col_width = width - fig_col_width;
+# group_col_width = fig_col_width/num_groups;
+
+# # main_col_wids = [fig_col_width/3,fig_col_width/3,fig_col_width/3,width/4]
+# main_col_wids = [fig_col_width/num_fig_cols for _ in range(num_fig_cols)] + [width/4];
+# main_row_heights = [fig_row_height/num_fig_rows for _ in range(num_fig_rows)] + [200,300]; #height-fig_row_height];
+
+# # # column_widths = [main_col_wids[0]*0.7,main_col_wids[0]*0.3,
+# # #                  main_col_wids[1]*0.7,main_col_wids[1]*0.3,
+# # #                  main_col_wids[2]*0.7,main_col_wids[2]*0.3,
+# # #                  main_col_wids[3]*0.7,main_col_wids[3]*0.3]
+
+
+
+# column_widths = [];
+# for i in range(len(main_col_wids)):
+#     column_widths.append(main_col_wids[i]*0.7);
+#     column_widths.append(main_col_wids[i]*0.3);
+
+# row_heights = [];
+# for i in range(len(main_row_heights)):
+#     row_heights.append(main_row_heights[i]*0.5);
+#     row_heights.append(main_row_heights[i]*0.5);
+    
+# # fig_col_width = np.sum(main_col_wids[:3])
+
+# # width = fig_col_width + right_col_width;
+# # height =  fig_row_height + bot_row_height;
+
+# nrows1 = 4;
+# ngroups = 2;
+# row_height1 = fig_row_height/nrows1
+
+# row1_loc = -0.05;
+# row2_loc = -0.25;
+# row3_loc = -0.45;
+# row4_loc = -0.65;
+# row5_loc = -0.85;
+
+# col1_wid = 0.2;
+# col2_wid = 0.2;
+# col3_wid = 0.2;
+
+
+
+# # padb1s = np.array([0.1,0.1,0.1]);
+# # padl1s = np.array([0.04,0.04,0.04]);
+# padb1s = np.array([0.05,0.05,0.05,0.05]);
+# padl1s = np.array([0.02,0.02,0.02,0.02]);
+# padb1s_px = height*padb1s
+# padb2 = 0.05; padl2 = 0.02; padt2 = 0.02;
+# padb3 = 0.01; padl3 = 0.02; padt3 = 0.02;
+
+
+# INDS = {'fig':(1,1),
+#         'bar_drive_time':(1,2*num_fig_cols+1),'box_drive_time':(1,2*num_fig_cols+2),
+#         'bar_drive_money':(2,2*num_fig_cols+1),'box_drive_money':(2,2*num_fig_cols+2),
+#         'bar_walk_time':(3,2*num_fig_cols+1),'box_walk_time':(3,2*num_fig_cols+2),
+#         'bar_walk_money':(4,2*num_fig_cols+1),'box_walk_money':(4,2*num_fig_cols+2),
+#         'bar_gtfs_time':(5,2*num_fig_cols+1),'box_gtfs_time':(5,2*num_fig_cols+2),
+#         'bar_gtfs_money':(6,2*num_fig_cols+1),'box_gtfs_money':(6,2*num_fig_cols+2),
+#         'bar_ondemand_time':(7,2*num_fig_cols+1),'box_ondemand_time':(7,2*num_fig_cols+2),
+#         'bar_ondemand_money':(8,2*num_fig_cols+1),'box_ondemand_money':(8,2*num_fig_cols+2),
+#         'bar_people_time':(2*num_fig_rows + 3,1),'box_people_time':(2*num_fig_rows + 3,2*num_fig_cols+1),
+#         'bar_people_money':(2*num_fig_rows + 4,1),'box_people_money':(2*num_fig_rows + 4,2*num_fig_cols+1)}
+
+
+# PADS = {'fig':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'bar_drive_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'box_drive_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'bar_drive_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'box_drive_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'bar_walk_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'box_walk_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'bar_walk_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'box_walk_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'bar_gtfs_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'box_gtfs_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'bar_gtfs_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'box_gtfs_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'bar_ondemand_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'box_ondemand_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'bar_ondemand_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'box_ondemand_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+
+#         'bar_people_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'box_people_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'bar_people_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01},
+#         'box_people_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01}
+#        }
+
+
+# button_locs = [0,1.1]; dx = 0.14; 
+# CTRL_LOCS = {'lines': [button_locs[0],button_locs[1]],
+#              'source':[button_locs[0]+1*dx,button_locs[1]],
+#              'target':[button_locs[0]+2*dx,button_locs[1]],
+#              'drive':[button_locs[0]+3*dx,button_locs[1]],
+#              'walk':[button_locs[0]+4*dx,button_locs[1]],
+#              'gtfs':[button_locs[0]+5*dx,button_locs[1]],
+#              'ondemand':[button_locs[0]+6*dx,button_locs[1]],
+
+#              'drive_trips':[0.,(1.-np.sum(row_heights[:num_groups*2+2])/height),right_col_width/width],
+#              'walk_trips' :[0.,(1.-np.sum(row_heights[:num_groups*2+2])/height),right_col_width/width],
+#              'gtfs_trips' :[0.,(1.-np.sum(row_heights[:num_groups*2+2])/height),right_col_width/width],
+#              'ondemand_trips':[0.,(1.-np.sum(row_heights[:num_groups*2+2])/height),right_col_width/width],
+             
+#              # 'drive_trips':[fig_col_width/width,(bot_row_height+3.*row_height1)/height,right_col_width/width],
+#              # 'walk_trips' :[fig_col_width/width,(bot_row_height+2.*row_height1)/height,right_col_width/width], 
+#              # 'gtfs_trips' :[fig_col_width/width,(bot_row_height+row_height1)/height,right_col_width/width], 
+#              # 'ondemand_trips' :[fig_col_width/width,bot_row_height/height,right_col_width/width], 
+             
+#              'group0':[0.*group_col_width/width,0.,group_col_width/width], 
+#              'group1':[1.*group_col_width/width,0.,group_col_width/width],
+#              'group2':[2.*group_col_width/width,0.,group_col_width/width],
+#              'group3':[3.*group_col_width/width,0.,group_col_width/width],
+#              'group4':[4.*group_col_width/width,0.,group_col_width/width],
+
+#              'group0_runs':[0.*group_col_width/width,row1_loc,group_col_width/width], 
+#              'group1_runs':[1.*group_col_width/width,row1_loc,group_col_width/width],
+#              'group2_runs':[2.*group_col_width/width,row1_loc,group_col_width/width],
+#              'group3_runs':[3.*group_col_width/width,row1_loc,group_col_width/width],
+#              'group4_runs':[4.*group_col_width/width,row1_loc,group_col_width/width],
+
+#               ########################################################################
+             
+#              'drive_costs':[0.*group_col_width/width,row2_loc,col2_wid],
+#              'walk_costs':[1.*group_col_width/width,row2_loc,col2_wid],
+#              'gtfs_costs':[2.*group_col_width/width,row2_loc,col2_wid],
+#              'ondemand_costs':[3.*group_col_width/width,row2_loc,col2_wid],
+
+#              'time_costs':[0.*group_col_width/width,row3_loc,col3_wid],
+#              'money_costs':[1.*group_col_width/width,row3_loc,col3_wid],
+#              'conven_costs':[2.*group_col_width/width,row3_loc,col3_wid],
+#              'switches_costs':[3.*group_col_width/width,row3_loc,col3_wid]};
+
+
+# # INDS = {'fig':(1,1),
+# #         'bar_drive_time':(2*num_groups + 1,1),'box_drive_time':(2*num_groups + 1,2),
+# #         'bar_drive_money':(2*num_groups + 2,1),'box_drive_money':(2*num_groups + 2,2),
+# #         'bar_walk_time':(2*num_groups + 1,3),'box_walk_time':(2*num_groups + 1,4),
+# #         'bar_walk_money':(2*num_groups + 2,3),'box_walk_money':(2*num_groups + 2,4),
+# #         'bar_gtfs_time':(2*num_groups + 1,5),'box_gtfs_time':(2*num_groups + 1,6),
+# #         'bar_gtfs_money':(2*num_groups + 2,5),'box_gtfs_money':(2*num_groups + 2,6),
+# #         'bar_ondemand_time':(2*num_groups + 1,7),'box_ondemand_time':(2*num_groups + 1,8),
+# #         'bar_ondemand_money':(2*num_groups + 2,7),'box_ondemand_money':(2*num_groups + 2,8),
+# #         'bar_people_time':(2*num_groups + 3,1),'box_people_time':(2*num_groups + 3,7),
+# #         'bar_people_money':(2*num_groups + 4,1),'box_people_money':(2*num_groups + 4,7)
+# #        }
+
+
+# NEWINDS = {'bar_'+group+'_time': (2*num_fig_rows+1,2*i+1) for i,group in enumerate(groups)}; INDS = {**INDS,**NEWINDS}
+# NEWINDS = {'bar_'+group+'_money': (2*num_fig_rows+2,2*i+1) for i,group in enumerate(groups)}; INDS = {**INDS,**NEWINDS}
+# NEWINDS = {'box_'+group+'_time':(2*num_fig_rows+1,2*i+2) for i,group in enumerate(groups)}; INDS = {**INDS,**NEWINDS}
+# NEWINDS = {'box_'+group+'_money':(2*num_fig_rows+2,2*i+1) for i,group in enumerate(groups)}; INDS = {**INDS,**NEWINDS}
+
+
+# # NEWINDS = {'bar_'+group+'_time': (2*i+1,7) for i,group in enumerate(groups)}; INDS = {**INDS,**NEWINDS}
+# # NEWINDS = {'bar_'+group+'_money': (2*i+2,7) for i,group in enumerate(groups)}; INDS = {**INDS,**NEWINDS}
+# # NEWINDS = {'box_'+group+'_time':(2*i+1,8) for i,group in enumerate(groups)}; INDS = {**INDS,**NEWINDS}
+# # NEWINDS = {'box_'+group+'_money':(2*i+2,8) for i,group in enumerate(groups)}; INDS = {**INDS,**NEWINDS}
+
+# NEWPADS = {'bar_'+group+'_time': {'l':0.01,'r':0.01,'t':0.01,'b':0.01} for i,group in enumerate(groups)}; PADS = {**PADS,**NEWPADS}
+# NEWPADS = {'bar_'+group+'_money': {'l':0.01,'r':0.01,'t':0.01,'b':0.01} for i,group in enumerate(groups)}; PADS = {**PADS,**NEWPADS}
+# NEWPADS = {'box_'+group+'_time':{'l':0.01,'r':0.01,'t':0.01,'b':0.01} for i,group in enumerate(groups)}; PADS = {**PADS,**NEWPADS}
+# NEWPADS = {'box_'+group+'_money':{'l':0.01,'r':0.01,'t':0.01,'b':0.01} for i,group in enumerate(groups)}; PADS = {**PADS,**NEWPADS}
+
+        
+        
+# # top_row_specs = [[{"rowspan": num_groups, "colspan": 3,"type": "image"}]+[None for _ in range(5)] + 
+# #            [{'b':padb1s[0],'l':padl1s[0]}], #"type": "bar"}],
+# #            [None for _ in range(num_groups)] + [{'b':padb1s[1],'l':padl1s[1]}],#"type": "bar"}],
+# #            [None for _ in range(num_groups)] + [{'b':padb1s[2],'l':padl1s[2]}],#"type": "bar"}],
+# #            [None for _ in range(num_groups)] + [{'b':padb1s[3],'l':padl1s[3]}]]
+
+# top_row_specs = [[{"rowspan": 2*num_fig_rows, "colspan": 2*num_fig_cols,"type": "image"}]+[None for _ in range(2*num_fig_cols-1)] + [{},{}]]
+# top_row_specs = top_row_specs + [[None for _ in range(2*num_fig_cols)] + [{},{}] for _ in range(num_fig_rows*2-1)];
+
+# bot_row_specs = [[{} for _ in range(2*num_fig_cols + 2)],
+#                  [{} for _ in range(2*num_fig_cols + 2)],
+#                  [{"rowspan": 1, "colspan": num_fig_cols}]+[None for _ in range(2*num_fig_cols-1)] + [{"rowspan": 1, "colspan": 2},None],
+#                  [{"rowspan": 1, "colspan": num_fig_cols}]+[None for _ in range(2*num_fig_cols-1)] + [{"rowspan": 1, "colspan": 2},None]]
+    
+# subplot_specs = top_row_specs + bot_row_specs;
+
+# for tag in INDS:
+#     inds = INDS[tag];
+#     if tag in PADS: subplot_specs[inds[0]-1][inds[1]-1] = {**subplot_specs[inds[0]-1][inds[1]-1],**PADS[tag]};
+
+# subplots_locs = [];
+
+
+# nrows2 = len(bot_row_specs);
+
+
+# fig = make_subplots(
+#     rows=len(subplot_specs), cols = len(subplot_specs[0]),    
+#     column_widths = column_widths,
+#     row_heights = row_heights,
+#     horizontal_spacing=0.0,
+#     vertical_spacing=0.0,
+#     specs=subplot_specs,
+#     print_grid=True); 
+    
+#     # {'b':padb2,'l':padl2,'t':padt2} for _ in range(num_groups)] + [{}],
+#     #            [{'b':padb3,'l':padl3,'t':padt3} for _ in range(num_groups)] + [{}],
+#     #            [{'b':padb3,'l':padl3,'t':padt3} for _ in range(num_groups)] + [{}],
+#     #            [{'b':padb3,'l':padl3,'t':padt3} for _ in range(num_groups)] + [{}],
+#     #            [{'b':padb3,'l':padl3,'t':padt3} for _ in range(num_groups)] + [{}],
+#     #            [{'b':padb3,'l':padl3,'t':padt3} for _ in range(num_groups)] + [{}]];
+
+
+
+#     def GENERATE(self):
+#         pass
+#     def PRINT(self):
+#         pass
+
+#     def generateLayers(self,params,folder,verbose = True):
+
+#         if verbose: print('WRITING LAYERS FOR DASHBOARD:')
+#         params = {};
+#         params['bgcolor'] = [1,1,1,1]
+#         LAYERS = generateLayers(self.GRAPHS,self.NODES,
+#                                 self.SIZES,self.ONDEMAND,WORLD,params,use_all_trips=True);
+#         # tag = 'base'
+#         # plotLayer(GRAPHS,layers[tag])
+#         folder = 'figs/interact/layers/'
+
+        
+#         path = folder
+#         if not os.path.exists(path): os.mkdir(path)
+
+#         tags = ['drive_trips/','walk_trips/','gtfs_trips/','ondemand_trips/']
+#         for tag in tags:
+#             path = folder + tag
+#             if not os.path.exists(path):
+#                 os.mkdir(path)
+#         path = folder + 'groups/';
+#         if not os.path.exists(path): os.mkdir(path)
+#         path = folder + 'runs/';
+#         if not os.path.exists(path): os.mkdir(path)
+
+#         plotLAYERS(self.GRAPHS,folder,LAYERS);
+
+#     def sortDataForDashboard(self):
+#         print('SORTING DATA FOR DASHBOARD...')
+
+#         compute_UncongestedEdgeCosts(WORLD,GRAPHS)
+#         compute_UncongestedTripCosts(WORLD,GRAPHS)
+#         OUTPUT1 = sortingData(WORLD,GRAPHS,DELIVERY,factor='time',use_all_trips=True);
+#         tripsSorted = OUTPUT1['trips_sorted'];
+#         convergeSorted = OUTPUT1['converge_sorted'];
+
+#         OUTPUT2 = sortingData(WORLD,GRAPHS,DELIVERY,factor='money',use_all_trips=True);
+#         tripsSorted2 = OUTPUT2['trips_sorted'];
+#         convergeSorted2 = OUTPUT2['converge_sorted'];
+
+
+#         parent_dir = './figs/interact/layers/'
+#         # out_parent_dir = './figs/interact/gifs/'
+
+#         images0 = []; images1 = [];
+#         base_names = ['group0_delivery','group1_delivery']
+#         num_figs = [7,7];
+
+
+#         tags = ['base','lines','source','target',
+#                 'drive','ondemand','gtfs','walk',
+#                 'group0','group1',
+#                 'drive_trips',
+#                 'walk_trips',
+#                 'gtfs_trips',
+#                 'ondemand_trips']; 
+
+
+#         groups = []
+#         groups0 = list(tripsSorted['ondemand']['groups'])
+#         for group in groups0:
+#             if len(tripsSorted['ondemand']['groups'][group]['costs'])>0: groups.append(group)
+
+
+
+#     def LOAD_DATA(self):
+
+#         self.FILENAMES = {};
+
+
+# FILENAMES = {tag:[] for tag in tags}
+# IMGS = {tag:[] for tag in tags}
+# IMGS2 = {tag:[] for tag in tags}
+# FIGS = {tag:[] for tag in tags}
+
+# #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES 
+# #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES 
+# #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES 
+
+# DATAINDS2 = {'imgs':{},'bars':{},'box':{}};
+# data_counter = 0;
+
+# ## CREATING FILE NAMES 
+
+# for i,tag in enumerate(['base','lines','source','target','drive','walk','gtfs','ondemand']):
+#     FILENAMES[tag] = [parent_dir + tag + '.png']
+#     # DATAINDS2['imgs'][tag] = data_counter; data_counter = data_counter + 1;
+
+# # for i,tag in enumerate(['group0','group1']):
+# #     FILENAMES[tag] = [parent_dir + base_names[i] + str(j) + '.png' for j in range(num_figs[i])]
+    
+
+# # for i,tag in enumerate(['walk_trips','gtfs_trips','ondemand_trips']): #(['drive_trips','walk_trips','gtfs_trips']):
+# #     current_folder = parent_dir + tag + '/';
+# #     files = os.listdir(current_folder); #[:5];
+# #     FILENAMES[tag] = [current_folder + file for file in files]
+
+
+
+# ###### ADDING IMAGES ###### ADDING IMAGES ###### ADDING IMAGES ###### ADDING IMAGES ###### ADDING IMAGES 
+# ###### ADDING IMAGES ###### ADDING IMAGES ###### ADDING IMAGES ###### ADDING IMAGES ###### ADDING IMAGES 
+# ###### ADDING IMAGES ###### ADDING IMAGES ###### ADDING IMAGES ###### ADDING IMAGES ###### ADDING IMAGES 
+
+# # for i,tag in enumerate(FILENAMES):
+# #     # if len(FILENAMES[tag])>0:
+# #     for j,filename in enumerate(FILENAMES[tag]):
+# #         # IMGS[tag].append(Image.open(filename)); #imageio.v2.imread(filename))
+# #         IMGS[tag].append(px.imshow(sio.imread(filename)));
+
+# ####################################################################################
+# ####################################################################################
+# ####################################################################################
+# ####################################################################################
+
+
+
+# DATA_IMGS = [];
+# DATAINDS = {};
+# STARTINDS = {tag:[] for tag in tags};
+# all_start_inds = [];
+# # for tag in tags:
+# #     STARTINDS[tag] = len(DATA_IMGS)
+# #     all_start_inds.append(len(DATA_IMGS));    
+# #     new_data_inds = [];
+# #     for i,IMG in enumerate(IMGS[tag]):
+# #         new_data_inds.append(len(DATA_IMGS));
+# #         DATA_IMGS.append(IMG);
+# #     DATAINDS[tag] = new_data_inds.copy()
+
+
+# # for figm in figms:
+# # for imgm in DATA_IMGS:
+# #     fig.add_trace(imgm.data[0], 1, 1)
+# #     data_counter = data_counter + 1;
+# # x, y = np.meshgrid(np.linspace(-pi/2, pi/2, 100), np.linspace(-pi/2, pi/2, 100))
+
+
+
+
+# FILENAMES2 = {tag:[] for tag in tags}
+# IMGS = {tag:[] for tag in tags}
+# IMGS2 = {tag:[] for tag in tags}
+# FIGS = {tag:[] for tag in tags}
+
+# #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES 
+# #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES 
+# #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES #### LOADING FILES 
+
+
+# #### ADDING IMAGES...#### ADDING IMAGES...#### ADDING IMAGES...#### ADDING IMAGES...
+# #### ADDING IMAGES...#### ADDING IMAGES...#### ADDING IMAGES...#### ADDING IMAGES...
+# #### ADDING IMAGES...#### ADDING IMAGES...#### ADDING IMAGES...#### ADDING IMAGES...
+# for i,tag in enumerate(['base','lines','source','target','drive','walk','gtfs','ondemand']):
+#     filename = parent_dir + tag + '.png'
+#     FILENAMES2[tag] = filename
+#     DATAINDS2['imgs'][tag] = data_counter; data_counter = data_counter + 1;
+#     imgm = px.imshow(sio.imread(filename));
+#     fig.add_trace(imgm.data[0], 1, 1)
+    
+
+# DATAINDS2['imgs']['groups'] = {};
+# for group in DELIVERY['groups']:
+#     DATAINDS2['imgs']['groups'][group] = {};
+#     TRIPS = tripsSorted['ondemand']['groups'][group]['trips'];
+#     for k,trip in enumerate(TRIPS):
+#         node1 = int(trip[0]); node2 = int(trip[1]);
+#         tag = group+'_'+str(node1)+'_'+str(node2);
+#         try: 
+#             filename = parent_dir + 'groups/'+'ondemand_'+tag+'.png';
+#             imgm = px.imshow(sio.imread(filename));
+#             FILENAMES2[tag] = filename
+#             DATAINDS2['imgs']['groups'][group][tag] = data_counter; data_counter = data_counter + 1;        
+#             fig.add_trace(imgm.data[0], 1, 1)
+#             fig.data[-1].visible = False;
+#         except:
+#             pass;
+
+# DATAINDS2['imgs']['runs'] = {};
+# for g,group in enumerate(DELIVERY['groups']):
+#     DATAINDS2['imgs']['runs'][group] = {};
+#     RUNS = tripsSorted['ondemand']['groups'][group]['runs']
+#     for k,runid in enumerate(RUNS):
+#         try: 
+#             filename = parent_dir + 'runs/' + group + '_run' + str(runid) + '.png';
+#             imgm = px.imshow(sio.imread(filename));
+#             DATAINDS2['imgs']['runs'][group][runid] = data_counter; data_counter = data_counter + 1;
+#             fig.add_trace(imgm.data[0], 1, 1)
+#             fig.data[-1].visible = False;
+#         except:
+#             pass;
+
+# for mode in ['drive','walk','gtfs']:
+#     DATAINDS2['imgs'][mode+'_trips'] = {};
+#     TRIPS = tripsSorted[mode]['trips']
+#     for k,trip in enumerate(TRIPS):
+#         node1 = str(int(trip[0])); node2 = str(int(trip[1]));
+#         tag = mode + '_' + node1 + '_' + node2;
+#         try: 
+#             filename = parent_dir + mode + '_trips/' + tag + '.png';
+#             imgm = px.imshow(sio.imread(filename));
+#             FILENAMES2[tag] = filename
+#             DATAINDS2['imgs'][mode+'_trips'][tag] = data_counter; data_counter = data_counter + 1;
+#             fig.add_trace(imgm.data[0],1,1)
+#             fig.data[-1].visible = False
+#         except:
+#             pass 
+
+# # for i in range(len(fig.data)): 
+# #     if not(i in all_start_inds):
+# #         fig.data[i].visible = False;
+
+
+# colors = {'drive':[1,0,0,1],
+#           'walk':[1,1,0,1],
+#           'gtfs':[1,0.5,0.,1],
+#           'ondemand':[0,0,1,1],
+#           'groups':[[0,0,1,1],[0.5,0,1,1]],
+#           'time':[1,0,0,1],'money':[0,0.8,0.,1.],'conven':[0,0,1,1],'switches':[0,0,0,1]}
+
+
+
+# ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES 
+# ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES 
+# ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES 
+# ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES ###### BOXES 
+
+# modes = ['drive','walk','gtfs','ondemand']
+# factors = ['time','money','conven','switches']
+# use_factors = ['time','money']
+
+# TRIPS_SORTED = {};
+# TRIPS_SORTED['time'] = tripsSorted
+# TRIPS_SORTED['money'] = tripsSorted2;
+
+# for i,mode in enumerate(modes):
+#     for factor in use_factors:
+#         inds = INDS['box_'+mode+'_'+factor]
+#         tag1 = mode + '_costs';
+#         DATAINDS2['box'][tag1] = {};
+#         data_counter = data_counter + 1;
+#         costs = TRIPS_SORTED[factor][mode]['costs']
+#         color = px.colors.label_rgb(list(255*np.array(colors[mode])))
+#         edgecolor = 'rgb(0,0,0)'; opac = 0.7;        
+#         fig.add_trace(go.Box(y=costs,fillcolor=color,opacity=opac,marker_color=edgecolor,line={'width':1}),inds[0],inds[1])
+#                              # width=0.5,marker = {'color' :'rgb(0,0,0)','opacity':0.9}), i+5,1)
+#         # fig.data[-1].visible = True;
+
+
+# DATAINDS2['box']['groups'] = {};
+# DATAINDS2['box']['runs'] = {};
+# for i,group in enumerate(groups):
+#     for factor in use_factors: 
+#         inds = INDS['box_'+group+'_' + factor]        
+#         # try: 
+#         # counts = tripsSorted['ondemand']['groups'][group]['counts']
+#         costs = TRIPS_SORTED[factor]['ondemand']['groups'][group]['costs']
+#         trips = TRIPS_SORTED[factor]['ondemand']['groups'][group]['trips']
+#         counts = TRIPS_SORTED[factor]['ondemand']['groups'][group]['group_counts']
+#         color = px.colors.label_rgb(list(255*np.array(colors['groups'][i])))
+#         edgecolor = 'rgb(0,0,0)'; opac = 0.7; 
+#         name = group + '_'
+#         fig.add_trace(go.Box(y=costs,fillcolor=color,opacity=opac,marker_color=edgecolor,name=name,line={'width':1}),inds[0],inds[1])
+#         data_counter = data_counter + 1;
+
+# for factor in use_factors:
+#     for mode in modes:
+#         inds = INDS['box_people_'+factor]
+#         tag1 = mode + '_costs';
+#         DATAINDS2['box'][tag1] = {};
+#         data_counter = data_counter + 1;
+#         costs = TRIPS_SORTED[factor][mode]['costs']
+#         color = px.colors.label_rgb(list(255*np.array(colors[mode])))
+#         edgecolor = 'rgb(0,0,0)'; opac = 0.7;        
+#         fig.add_trace(go.Box(y=costs,fillcolor=color,opacity=opac,marker_color=edgecolor,line={'width':1}),inds[0],inds[1])
+#         fig.data[-1].visible = True;
+    
+#                          # width=0.5,marker = {'color' :'rgb(0,0,0)','opacity':0.9}), i+5,1)
+#     # fig.data[-1].visible = True;
+
+
+# ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS 
+# ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS 
+# ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS 
+# ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS ##### BARS 
+
+# DATAINDS2['bars']['groups'] = {};
+# DATAINDS2['bars']['runs'] = {};
+# for i,group in enumerate(groups):
+#     inds = INDS['bar_'+group+'_time']
+#     inds2 = INDS['bar_'+group+'_money']
+#     # try: 
+#     # counts = tripsSorted['ondemand']['groups'][group]['counts']
+#     costs = tripsSorted['ondemand']['groups'][group]['costs']
+#     trips = tripsSorted['ondemand']['groups'][group]['trips']
+#     counts = tripsSorted['ondemand']['groups'][group]['group_counts']
+#     color = px.colors.label_rgb(list(255*np.array(colors['groups'][i])))
+#     all_start_inds.append(len(fig.data))
+#     fig.add_trace(go.Bar(x=counts,y=costs,width=0.5,base ='overlay',marker = {'color' :color,'opacity':0.5}),inds[0],inds[1])
+#     DATAINDS2['bars']['groups'][group+'_full'] = data_counter; data_counter = data_counter + 1;        
+#     DATAINDS2['bars']['groups'][group] = {};
+
+#     ########################################
+#     # counts = tripsSorted['ondemand']['groups'][group]['counts']
+#     costs2 = tripsSorted2['ondemand']['groups'][group]['costs']
+#     trips2 = tripsSorted2['ondemand']['groups'][group]['trips']
+#     counts2 = tripsSorted2['ondemand']['groups'][group]['group_counts']
+#     color = px.colors.label_rgb(list(255*np.array(colors['groups'][i])))
+#     all_start_inds.append(len(fig.data))
+#     # try: 
+#     fig.add_trace(go.Bar(x=counts2,y=costs2,width=0.5,base ='overlay',marker = {'color' :color,'opacity':0.5}),inds2[0],inds2[1])
+#     # DATAINDS2['bars']['groups'][group+'_full'] = data_counter;
+#     data_counter = data_counter + 1;      
+#     # except: pass
+#     ########################################
+    
+#     for k,trip in enumerate(trips):
+#         node1 = str(int(trip[0])); node2 = str(int(trip[1])); 
+#         color = 'rgb(0,0,0)';
+#         fig.add_trace(go.Bar(x=[counts[k]],y=[costs[k]],width=0.5,base ='overlay',marker = {'color' :color,'opacity':1.}), inds[0],inds[1])
+#         fig.data[-1].visible = False; 
+#         tag = group+'_'+str(node1)+'_'+str(node2);
+#         DATAINDS2['bars']['groups'][group][tag] = data_counter; data_counter = data_counter + 1;        
+
+#         node1 = str(int(trip[0])); node2 = str(int(trip[1])); 
+#         color = 'rgb(0,0,0)';
+#         fig.add_trace(go.Bar(x=[counts2[k]],y=[costs2[k]],width=0.5,base ='overlay',marker = {'color' :color,'opacity':1.}), inds2[0],inds2[1])
+#         fig.data[-1].visible = False
+#         tag = group+'_'+str(node1)+'_'+str(node2);
+#         # DATAINDS2['bars']['groups'][group][tag] = data_counter;
+#         data_counter = data_counter + 1;        
+
+    
+
+#     RUNS = tripsSorted['ondemand']['groups'][group]['runs']
+#     DATAINDS2['bars']['runs'][group] = {};
+#     DATAINDS[group+'_runs'] = []
+#     all_start_inds.append(len(fig.data))
+#     color = px.colors.label_rgb(list(255*np.array(colors['groups'][i])))
+#     for k,run in enumerate(RUNS):
+#         DATAINDS2['bars']['runs'][group][run] = data_counter;
+#         RUN = RUNS[run];
+#         DATAINDS[group + '_runs'].append(len(fig.data))
+#         costs = RUN['costs']
+#         counts = RUN['overall_counts'];
+#         data_counter = data_counter + 1;
+#         fig.add_trace(go.Bar(x=counts,y=costs,base='overlay',width=0.5,marker = {'color' :color,'opacity':0.9}),inds[0],inds[1])
+#         fig.data[-1].visible = False
+    
+# ##### NEW
+
+
+# use_factors = ['time','money']
+# for i,mode in enumerate(['drive','walk','gtfs','ondemand']):
+#     for factor in use_factors:
+#         inds = INDS['bar_'+mode+'_'+factor]
+#         DATAINDS2['bars'][mode+'_trips_' + factor] = {};
+#         trips = TRIPS_SORTED[factor][mode]['trips']
+#         costs = TRIPS_SORTED[factor][mode]['costs']
+#         counts = TRIPS_SORTED[factor][mode]['counts'];
+#         # counts = list(range(len(costs)));
+#         # print(mode,' counts:',counts)
+#         color = px.colors.label_rgb(list(255*np.array(colors[mode])))
+#         opac = 0.5;
+#         if mode == 'walk': opac = 1;
+#         fig.add_trace(go.Bar(x=counts,y=costs,width=0.5,marker = {'color' :color,'opacity':opac}), inds[0],inds[1])
+#         fig.data[-1].visible = True;
+#         DATAINDS2['bars'][mode + '_full_'+'factor'] = data_counter
+#         data_counter = data_counter + 1;
+#         for k,trip in enumerate(trips):
+#             node1 = str(int(trip[0])); node2 = str(int(trip[1]));
+#             tag = mode + '_' + node1 + '_' + node2;
+#             DATAINDS2['bars'][mode+'_trips_'+factor][tag] = data_counter
+#             data_counter = data_counter + 1;
+#             fig.add_trace(go.Bar(x=[counts[k]],y=[costs[k]],width=0.5,marker = {'color' :'rgb(0,0,0)','opacity':0.9}),inds[0],inds[1]);
+#             fig.data[-1].visible = False;
+
+
+
+# # use_factors = ['time','money']
+# # mode = 'gtfs'
+# # for factor in use_factors:
+# #     inds = INDS['bar_people_'+factor]
+# #     DATAINDS2['bars'][mode+'_trips_' + factor] = {};
+# #     trips = TRIPS_SORTED[factor][mode]['trips']
+# #     costs = TRIPS_SORTED[factor][mode]['costs']
+# #     counts = TRIPS_SORTED[factor][mode]['counts'];
+#     # color = px.colors.label_rgb(list(255*np.array(colors[mode])))
+#     # opac = 0.5;
+#     # fig.add_trace(go.Bar(x=counts,y=costs,width=0.5,marker = {'color' :color,'opacity':opac}), inds[0],inds[1])
+#     # fig.data[-1].visible = True;
+#     # data_counter = data_counter + 1;
+#     # DATAINDS2['bars'][mode + '_full_'+'factor'] = data_counter
+#     # for k,trip in enumerate(trips):
+#     #     node1 = str(int(trip[0])); node2 = str(int(trip[1]));
+#     #     tag = mode + '_' + node1 + '_' + node2;
+#     #     DATAINDS2['bars'][mode+'_trips_'+factor][tag] = data_counter
+#     #     data_counter = data_counter + 1;
+#     #     fig.add_trace(go.Bar(x=[counts[k]],y=[costs[k]],width=0.5,marker = {'color' :'rgb(0,0,0)','opacity':0.9}),inds[0],inds[1]);
+#     #     fig.data[-1].visible = False;
+
+
+
+        
+# fig.update_layout(barmode='overlay')
+
+# #############################################################################################
+# #############################################################################################
+# #############################################################################################
+# #############################################################################################
+# #############################################################################################
+# #############################################################################################
+# #############################################################################################
+# #############################################################################################
+
+
+
+# ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS 
+# ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS 
+# ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS 
+
+# print('building sliders...')
+
+# SLIDERS = [];
+# # for tag in ['group0','group1']: 
+# #     steps = []
+# #     tag2 = tag + '_runs'
+# #     datainds = DATAINDS[tag]; # + DATAINDS[tag2]
+# #     print('len1: ',len1)
+# #     print('len2: ',len2)
+
+# #     len1 = len(DATAINDS[tag]);
+# #     len2 = len(DATAINDS[tag2]);
+# #     for i in range(len(DATAINDS[tag])): #intlen(fig.data)/2):    
+# #         datainds = DATAINDS[tag]+DATAINDS[tag2]
+# #         step = dict(method="update",label='',args=[{"visible": [False] * (len1+len2)},{},datainds])
+# #         step["args"][0]["visible"][i] = True  
+# #         step["args"][0]["visible"][i+len2] = True  
+# #         steps.append(step)
+# #     loc = CTRL_LOCS[tag2]
+# #     if len(loc)>=3: length = loc[2];
+# #     else: length = 0.2;
+# #     SLIDERS.append(dict(x=loc[0],y=loc[1],len=length,xanchor="left",yanchor="bottom",active=0,currentvalue={},pad={"t": 0},steps=steps))
+
+
+# for group in groups: #['group0','group1']: 
+#     steps = []
+#     datainds1 = [];
+#     datainds2 = [];
+#     for run in DATAINDS2['imgs']['runs'][group]:
+#         datainds1.append(DATAINDS2['imgs']['runs'][group][run]);
+
+#     for run in DATAINDS2['bars']['runs'][group]:        
+#         datainds2.append(DATAINDS2['bars']['runs'][group][run]);
+#     len1 = len(datainds1);
+#     len2 = len(datainds2);
+#     datainds = datainds1 + datainds2; 
+#     for i in range(len2):
+#         step = dict(method="update",label='',args=[{"visible": [False] * (len1+len2)},{},datainds])
+#         step["args"][0]["visible"][i] = True  
+#         step["args"][0]["visible"][i+len1] = True  
+#         steps.append(step)
+
+#     tag2 = group + '_runs';
+#     loc = CTRL_LOCS[tag2]
+#     if len(loc)>=3: length = loc[2];
+#     else: length = 0.2;
+#     SLIDERS.append(dict(x=loc[0],y=loc[1],len=length,xanchor="left",yanchor="top",active=0,currentvalue={},pad={"t": 0},steps=steps))
+
+
+# for tag in groups: #['group0','group1']: 
+#     ### NEW
+#     steps = []    
+#     datainds1 = []; datainds2 = [];
+#     TAGS = DATAINDS2['imgs']['groups'][tag];
+#     for tag2 in TAGS:
+#         try: datainds1.append(DATAINDS2['imgs']['groups'][tag][tag2])
+#         except: pass
+#         try: datainds2.append(DATAINDS2['bars']['groups'][tag][tag2]);
+#         except: pass
+#     datainds = datainds1 + datainds2
+#     len1 = len(datainds1); len2 = len(datainds2);
+
+#     if len2>0:
+#         print('len1: ',len1)
+#         print('len2: ',len2)
+#         for i in range(len2):
+#             step = dict(method="update",label='',args=[{"visible": [False] * (len1+len2)},{},datainds])
+#             step["args"][0]["visible"][i] = True  
+#             step["args"][0]["visible"][len1+i] = True  
+#             steps.append(step)
+#         loc = CTRL_LOCS[tag]
+#         if len(loc)>=3: length = loc[2];
+#         else: length = 0.2;
+#         SLIDERS.append(dict(x=loc[0],y=loc[1],len=length,xanchor="left",yanchor="top",active=0,currentvalue={},pad={"t": 0},steps=steps))
+
+
+# for tag0 in ['walk','drive','gtfs']: #,'ondemand_trips']:
+#     # NEW
+    
+#     datainds1 = []; datainds2 = [];
+#     dataindsn = {};
+#     tag = tag0 + '_trips'
+#     TAGS = DATAINDS2['imgs'][tag];
+#     lenn = []
+#     for tag2 in TAGS:
+#         try: datainds1.append(DATAINDS2['imgs'][tag0 + '_trips'][tag2])
+#         except: pass
+#     for factor in use_factors:
+#         dataindsn[factor] = []
+#         for tag2 in TAGS:
+#             dataindsn[factor].append(DATAINDS2['bars'][tag0 + '_trips_' + factor][tag2]);
+#         lenn.append(len(dataindsn[factor]));
+
+#     datainds = datainds1
+#     for factor in use_factors:
+#         datainds = datainds + dataindsn[factor]
+#     len1 = len(datainds1);  len2 = len(datainds2);
+
+#     # if lenn[0]>0
+#     # print('1: ',datainds1)
+#     # print('time: ' ,dataindsn['time'])
+#     # print('money: ',dataindsn['money'])
+#     # print(datainds)
+
+#     if len1 > 0: 
+#         steps = []
+#         for i in range(len1):
+#             step = dict(method="update",label='',args=[{"visible": [False] * (len1+np.sum(lenn))},{},datainds])
+#             step["args"][0]["visible"][i] = True  
+#             for k,factor in enumerate(use_factors):
+#                 step["args"][0]["visible"][len1 + int(np.sum(lenn[:k])) + i] = True  
+#             steps.append(step)
+            
+#         loc = CTRL_LOCS[tag]
+#         if len(loc)>=3: length = loc[2];
+#         else: length = 0.2;
+#         SLIDERS.append(dict(x=loc[0],y=loc[1],len=length,xanchor="left",yanchor="top",
+#                             active=0,currentvalue={},pad={"t": 0},steps=steps))    
+
+
+# print('building buttons...')
+# BUTTONS = [];
+# for tag in ['lines','source','target','drive','gtfs','walk','ondemand']: 
+#     loc = CTRL_LOCS[tag];
+#     # print(DATAINDS[tag])
+#     BUTTONS.append(dict(
+#             buttons=list([
+#                 dict(args=[{"visible":True},{},[DATAINDS2['imgs'][tag]]],label=tag + " ON" ,method="update"),
+#                 dict(args=[{"visible":False},{},[DATAINDS2['imgs'][tag]]],label=tag + " OFF",method="update")]),
+#             # type = "buttons",
+#             direction="down",
+#             pad={"r": 0, "t": 0},
+#             showactive=True,x=loc[0],xanchor="left",y=loc[1],yanchor="top"));
+
+
+
+# print('adding controls...')
+
+
+
+# fig.update_layout(updatemenus=BUTTONS)
+# fig.update_layout(sliders=SLIDERS)
+# width = np.sum(column_widths); height = 1.2*np.sum(row_heights); #+padb1*3)
+# fig.update_layout(width=width, height=height, xaxis_visible=False, yaxis_visible=False)
+
+
+
+# fig.update_layout(showlegend=False)
+
+# # fig.update_layout(xaxis_visible=False, yaxis_visible=False)
+
+# # fig.update_layout(autosize=True,
+# #     height=600,
+# #     width=500,
+# #     margin=dict(l=0,r=0,t=20,b=0),
+# #     grid = {'rows': 2, 'columns': 1, 'pattern': "independent"})
+
+# # fig.update_layout(column_widths = [400,300],row_heights = [800,300])
+
+
+
+# print('showing...')
+# fig.show()
+
+# print('done showing.')
+
+# import plotly.io as pio
+# pio.write_html(fig, file='case3.html', auto_open=True)
 
 
 
@@ -2792,6 +5630,7 @@ class ONDEMAND:
 
 
 
+        
 
 
 
@@ -2862,6 +5701,56 @@ def fakeManifest(self): #payload): ### ADDED TO CLASS
     return manifest
 
 
+class RUN:
+    def __init__(self,params,GRAPHS,FEEDS):
+
+        self.run_id = params['run_id'];
+        self.start_time = params['start_time']
+        self.end_time = params['end_time']
+        self.am_capacity = params['am_capacity'];
+        self.wc_capacity = params['wc_capacity'];
+        self.group_ind = params['group_ind']
+        self.group = params['group'];
+
+        self.GRAPHS = GRAPHS;
+        self.FEEDS = FEEDS;
+
+        ######################################################
+        self.booking_ids = [];
+        self.date = '2023-07-31'
+        self.loc = params['loc']
+        self.depot = {'pt': {'lat': self.loc[1], 'lon': self.loc[0]}, 'node_id': 0}
+        self.depot_node = ox.distance.nearest_nodes(self.GRAPHS['drive'], self.loc[0], self.loc[1]);
+
+        self.expected_cost = [0.];
+        self.current_expected_cost = 0.;
+        self.actual_average_cost = [];
+
+
+        self.costs = {'dist':[],'time':[],'money':[],'switches':[],'conven':[]};
+        currents = {'current_dist':None,'current_time':None,'current_money':None,'current_conven':None,'current_switches':None}
+        self.costs = {**self.costs,**currents}
+
+        self.DF = None;
+        self.total_passengers = None; 
+        self.max_num_passengers = None;
+        self.ave_num_passengers = None;            
+
+
+        self.VMT = [];
+        self.PMT = [];
+        self.VMTbyPMT = [];
+        self.current_VMT = None; 
+        self.current_PMT = None;
+        self.current_VMTbyPMT = None;
+        self.VTT = [];
+        self.PTT = [];
+        self.VTTbyPTT = [];
+        self.current_VTT = None; 
+        self.current_PTT = None;
+        self.current_VTTbyPTT = None;        
+        
+
 class GROUP: 
     def __init__(self,grpsDF,driversDF,params):
 
@@ -2879,6 +5768,7 @@ class GROUP:
         self.current_expected_cost = 0.;
         self.actual_average_cost = [];
         self.driver_runs = [];
+        self.runs = {};
         self.date = '2023-07-31'
         # num_drivers = 8; 
         # loc = ROW['depot_loc']        
@@ -2904,18 +5794,34 @@ class GROUP:
                 driver_end_time = ROW2['end_time']; 
                 am_capacity = ROW2['am_capacity'];
                 wc_capacity = ROW2['wc_capacity'];
-                self.driver_runs.append({'run_id': i,
+                run_data = {'run_id': i,
                     'start_time': driver_start_time,'end_time': driver_end_time,
-                    'am_capacity': am_capacity,'wc_capacity': wc_capacity})
+                    'am_capacity': am_capacity,'wc_capacity': wc_capacity}
+                self.driver_runs.append(run_data)
+                run_data2 = {'loc':self.loc,'group':self.group,'group_ind':self.group_ind}
+                run_data2 = {**run_data2,**run_data}                
+                self.runs[i] = RUN(run_data2,self.GRAPHS,self.FEEDS);
+
+        # self.booking_ids = [];
+        # self.date = '2023-07-31'
+        # self.loc = params['loc']
+        # self.depot = {'pt': {'lat': self.loc[1], 'lon': self.loc[0]}, 'node_id': 0}
+        # self.depot_node = ox.distance.nearest_nodes(self.GRAPHS['drive'], self.loc[0], self.loc[1]);
+
+
         else: 
             for i in range(num_drivers):
                 driver_start_time = WORLD['main']['start_time'];
                 driver_end_time = WORLD['main']['end_time'];
                 am_capacity = 8
                 wc_capacity = 2
-                self.driver_runs.append({'run_id': i,
+                run_data = {'run_id': i,
                     'start_time': driver_start_time,'end_time': driver_end_time,
-                    'am_capacity': am_capacity,'wc_capacity': wc_capacity})
+                    'am_capacity': am_capacity,'wc_capacity': wc_capacity}
+                self.driver_runs.append(run_data)
+                run_data2 = {'loc':self.loc,'group':self.group,'group_ind':self.group_ind}
+                run_data2 = {**run_data2,**run_data}
+                self.runs[i] = RUN(run_data2,self.GRAPHS,self.FEEDS);
 
         grpsDF['num_drivers'].iloc[self.group_ind] = num_drivers;
         grpsDF['num_possible_trips'].iloc[self.group_ind] = 0;
@@ -2965,7 +5871,7 @@ class GROUP:
             for i,count in enumerate(counts):
                 print('...computing averages for',count,'active ondemand trips in group',self.group_ind,'...')
                 for j in range(num_per_count):
-
+                    current_average = np.mean(pts[i,:j])
                     # try: 
                     trips_to_plan = sample(possible_trips,count)
                     nodes_to_update = [self.depot_node];
@@ -2991,7 +5897,10 @@ class GROUP:
                     average_time,times_to_average = self.assignCostsFromManifest(trips_to_plan,NETWORK.segs,nodes,MDF,NETWORK,0)
                     pts[i,j] = average_time
                     # except:
-                    #     pass
+                    #     pts[i,j] = current_average
+                    #     print('balked on running VRP...')
+
+
                     # ptsx[(i,j)] = times_to_average
         else:
             counts = np.linspace(1,100,num_counts)
@@ -3262,6 +6171,7 @@ class GROUP:
         return PLANS        
 
     def assignCostsFromManifest(self,active_segs,all_segs,nodes,MDF,NETWORK,ave_cost,track=True): #active_trips,nodes,MDF,WORLD,ave_cost,track=True):  ### ADDED TO CLASS
+
     # def assignCostsFromManifest(active_trips,nodes,MDF,WORLD,ave_cost,track=True):  ### ADDED TO CLASS
         mode = 'ondemand';
 
@@ -3270,7 +6180,87 @@ class GROUP:
         actual_costs = {};
         runs_info = {};
         run_ids = {};
+
+        # print(MDF['run_id'])
+        # print(list(MDF['run_id'].unique()))
+        # adsfasdfasd
+
+        
+        SEG_DATA = {};
+
+        if len(MDF)>0:
+            runids = list(MDF['run_id'].unique())
+
+            for runid in runids:
+                MDF2 = MDF[MDF['run_id'] == runid];
+                MDF2 = MDF2.sort_values(by="scheduled_time")  
+                RUN = self.runs[runid];
+                RUN.DF = MDF2;
+
+                run_start_time = np.min(MDF2['scheduled_time']);
+                run_end_time = np.max(MDF2['scheduled_time']);
+                total_run_time = run_end_time - run_start_time
+                VTT = total_run_time
+                VMT = total_run_time;
+
+                prev_event_time = run_start_time;
+                bookingids = MDF2['booking_id'].unique();
+
+                no_passenger_time = 0;
+
+                num_passengers = [];
+                PTT = 0; PMT = 0;
+                for bookingid in bookingids:
+                    mask1 = (MDF2['booking_id'] == bookingid) & (MDF2['action'] == 'pickup')
+                    mask2 = (MDF2['booking_id'] == bookingid) & (MDF2['action'] == 'dropoff')
+                    ind1 = np.where(mask1)[0][0]
+                    ind2 = np.where(mask2)[0][0]
+                    # PASSEN = MDF2[MDF2['booking_id'] == bookingid]
+                    PICKUP = MDF2.iloc[ind1]; #PASSEN[PASSEN['action'] == 'pickup'];
+                    DROPOFF = MDF2.iloc[ind2]; #PASSEN[PASSEN['action'] == 'dropoff'];
+                    time1 = PICKUP['scheduled_time'];
+                    time2 = DROPOFF['scheduled_time'];
+                    MDF3 = MDF2.iloc[ind1:ind2+1];
+                    current_num_passengers = np.sum(MDF3['action']=='pickup');
+                    num_passengers.append(current_num_passengers)
+
+                    SEG_DATA[bookingid] = {};
+                    SEG_DATA[bookingid]['current_num_passengers'] = current_num_passengers ######
+                    SEG_DATA[bookingid]['pickup_time_scheduled'] = time1;
+                    SEG_DATA[bookingid]['dropoff_time_scheduled'] = time2;
+
+                    PTT = PTT + (time2 - time1);
+                    PMT = PMT + (time2 - time1);
+
+                RUN.total_passengers = len(bookingids)
+                RUN.max_num_passengers = np.max(num_passengers);
+                RUN.ave_num_passengers = np.sum(num_passengers)/len(num_passengers);
+
+                RUN.VTT.append(VMT)
+                RUN.PTT.append(PMT)
+                RUN.VTTbyPTT.append(VTT/PTT)
+                RUN.VMT.append(VMT)
+                RUN.PMT.append(PMT)
+                RUN.VMTbyPMT.append(VMT/PMT)
+
+                RUN.current_VTT = VTT 
+                RUN.current_PTT = PTT
+                RUN.current_VTTbyPTT = VTT/PTT
+                RUN.current_VMT = VMT
+                RUN.current_PMT = PMT
+                RUN.current_VMTbyPMT = VMT/PMT;
+
+        ######################################################        ######################################################        ######################################################
+        ######################################################        ######################################################        ######################################################        
+
+        ######################################################       ######################################################       ######################################################
+        ######################################################       ######################################################       ######################################################
+
+        # print(NUM_PASSENGERS)
+
+        SEGS = NETWORK.segs;
         for i,seg in enumerate(active_segs):
+            SEG = SEGS[seg];
             node1 = seg[0]
             node2 = seg[1]
             booking_id = NETWORK.segs[seg].booking_id
@@ -3279,9 +6269,7 @@ class GROUP:
             curr_node_id1 = nodes[seg[0]]['curr']
             curr_node_id2 = nodes[seg[1]]['curr']
 
-
             try: 
-
                 # mask1 = (MDF['booking_id'] == booking_id) & (MDF['node_id'] == curr_node_id1) & (MDF['action'] == 'pickup');
                 # mask2 = (MDF['booking_id'] == booking_id) & (MDF['node_id'] == curr_node_id2) & (MDF['action'] == 'dropoff');
                 mask1 = (MDF['node_id'] == curr_node_id1) & (MDF['action'] == 'pickup');
@@ -3289,8 +6277,25 @@ class GROUP:
 
                 time1 = MDF[mask1]['scheduled_time'][0];
                 time2 = MDF[mask2]['scheduled_time'][0];
-
                 run_id = int(MDF[mask1]['run_id'][0]);
+
+                if booking_id in SEG_DATA:
+                    current_num_passengers = SEG_DATA[booking_id]['current_num_passengers']
+                    # = SEG_DATA[booking_id]['current_num_passengers']
+                    # = SEG_DATA[booking_id]['current_num_passengers']
+                    # print('booking id found...',booking_id)
+                else:
+                    current_num_passengers = 1;
+
+
+                SEG.num_passengers = current_num_passengers; 
+
+
+                SEG.pickup_time_scheduled = time1;
+                SEG.dropoff_time_scheduled = time2; 
+                SEG.pickup_time = time1;
+                SEG.dropoff_time = time2; 
+                SEG.run_id = run_id;
 
 
                 time_diff = np.abs(time2-time1)
@@ -3327,7 +6332,6 @@ class GROUP:
             #             WORLD[mode]['trips'][trip]['costs']['current_'+factor] = 0. 
 
         average_time = np.mean(np.array(times_to_average))
-
         print('...average manifest trip time: ',average_time)
         # est_ave_time = average_time
         est_ave_time = ave_cost
@@ -3353,7 +6357,7 @@ class GROUP:
                 NETWORK.segs[seg].costs['current_time'] = prev_time;
 
 
-            factors = ['time','money','conven','switches']
+            factors = ['dist','time','money','conven','switches']
             for j,factor in enumerate(factors):#WORLD[mode]['trips'][trip]['costs']):
                 if not(factor == 'time'): 
                     # WORLD[mode]['trips']['costs'][factor] = 0. 
@@ -3365,10 +6369,12 @@ class GROUP:
 
 
 class TRIP:
-    def __init__(self,modes,nodes,CONVERTER,delivery_grps=[],deliveries=[]): #,node_types,NODES,deliveries = []):
+    def __init__(self,trip_id,modes,nodes,CONVERTER,delivery_grps=[],deliveries=[]): #,node_types,NODES,deliveries = []):
     # def makeTrip(modes,nodes,NODES,delivery_grps=[],deliveries=[]): #,node_types,NODES,deliveries = []):
         trip = {};
         legs = [];
+
+        self.trip_id = trip_id;
 
         deliv_counter = 0;
         for i,mode in enumerate(modes):
@@ -3436,7 +6442,18 @@ class TRIP:
                     seg = (start_node,end_node)
 
                     if not(seg in NETWORK.segs):
-                        NETWORK.segs[seg] = SEG(seg,mode,PERSON,CONVERTER,GRAPHS,FEEDS,NETWORKS,ONDEMAND,params={'group':group})
+                        seg_id = mode + '_seg' + str(int(len(NETWORK.segs)))
+                        NETWORK.segs[seg] = SEG(seg_id,seg,mode,PERSON,CONVERTER,GRAPHS,FEEDS,NETWORKS,ONDEMAND,params={'group':group})
+                        if not(self.trip_id in NETWORK.segs[seg].trip_ids):
+                            NETWORK.segs[seg].trip_ids.append(self.trip_id)
+                        if not(PERSON.person_id in NETWORK.segs[seg].people):
+                            NETWORK.segs[seg].people.append(PERSON.person_id)
+                    else:
+                        if not(self.trip_id in NETWORK.segs[seg].trip_ids):
+                            NETWORK.segs[seg].trip_ids.append(self.trip_id)
+                        if not(PERSON.person_id in NETWORK.segs[seg].people):
+                            NETWORK.segs[seg].people.append(PERSON.person_id)
+
 
                     # SEG = NETWORK.segs[seg];
 
@@ -3560,17 +6577,21 @@ class TRIP:
         return cost
 
 class SEG:
-    def __init__(self,seg,mode,PERSON,CONVERTER,GRAPHS,FEEDS,NETWORKS,ONDEMAND,params={}): #WORLD,params={}):
+    def __init__(self,seg_id,seg,mode,PERSON,CONVERTER,GRAPHS,FEEDS,NETWORKS,ONDEMAND,params={}): #WORLD,params={}):
     # def querySeg(seg,mode,PERSON,NODES,GRAPHS,DELIVERY,WORLD,group='group0'):
                     # cost,path,_ = querySeg(seg_details,mode,PERSON,NODES,GRAPHS,DELIVERY,WORLD,group=group)
-        factors = ['distance','time','money','conven','switches']
+        factors = ['dist','time','money','conven','switches']
         self.mode = mode
+        self.seg_id = seg_id;
         self.source = seg[0]
         self.target = seg[0]
         self.start_time = 0;
         self.end_time = 14400;
         self.factors = factors;
         self.active = True;
+
+        self.trip_ids = [];
+        self.people = [];
 
         self.uncongested = {};
 
@@ -3610,6 +6631,10 @@ class SEG:
         #     self.dropoff_time_window_end = PERSON.dropoff_time_window_end
 
 
+        self.pickup_time_scheduled = None;
+        self.dropoff_time_scheduled = None;
+        self.num_passengers = 1;
+
 
         self.booking_id = PERSON.booking_id;
         self.pickup_node_id = PERSON.pickup_node_id;
@@ -3623,7 +6648,7 @@ class SEG:
         distance = 0;
         travel_time = 0;
         
-        current_costs = {'current_distance':distance,'current_time':travel_time,
+        current_costs = {'current_dist':distance,'current_time':travel_time,
                          'current_money': 0,'current_conven': 0,'current_switches': 0}
         self.costs = {factor:[] for factor in factors}
         self.costs = {**self.costs,**current_costs}
@@ -3638,12 +6663,14 @@ class SEG:
         self.current_path = None; #path;          
               
         if 'group' in params: self.group = params['group']
-        else: self.group = 'group0'
+        else: self.group = None;
+
 
         NETWORK = NETWORKS[mode];
 
         booking_id = int(len(NETWORK.booking_ids));
         self.booking_id = booking_id;
+        self.run_id = None;
         NETWORK.booking_ids.append(booking_id);
 
         if mode == 'ondemand':
@@ -3655,7 +6682,6 @@ class SEG:
                 GROUP.time_matrix = time_matrix;
                 self.pickup_node_id = shp[0];
                 self.dropoff_node_id = shp[0]+1;
-
 
         self.planSeg(mode,GRAPHS,FEEDS,NETWORKS,CONVERTER,ONDEMAND,track=False);
 
@@ -3695,7 +6721,7 @@ class SEG:
             distance = 1000000000000;
             path = [];
 
-        self.costs['current_distance'] = distance
+        self.costs['current_dist'] = distance
         self.costs['current_time'] = travel_time
         self.costs['current_money'] = 1;
         self.costs['current_conven'] = 0;
@@ -3704,7 +6730,7 @@ class SEG:
         self.mass = 0;
                     
         if track==True:
-            self.costs['distance'].append(distance)
+            self.costs['dist'].append(distance)
             self.costs['time'].append(travel_time)
             self.costs['money'].append(1)
             self.costs['conven'].append(1)
@@ -4339,7 +7365,7 @@ class NETWORK:
                         # print(payload.keys())
                         # print('')
                         # print(payload['date'])
-                        # print(payload['depot'])	
+                        # print(payload['depot'])   
                         # print('')
                         # print(payload['driver_runs'])
                         # print('')
@@ -4423,9 +7449,6 @@ class NETWORK:
 
             if clear_active: 
                 self.active_segs  = [];
-
-
-
             # else:
                 ########### -- XX START HERE ---- ####################
                 ########### -- XX START HERE ---- ####################
@@ -4526,6 +7549,12 @@ class NETWORK:
             if verbose == True:
                 if np.mod(t,50)==0: print('...segment number',t);
             source = seg[0]; target = seg[1];
+
+# def convertNode(self,node,from_mode,to_mode,from_type = 'graph',to_type = 'graph',verbose=False):
+#         transit_node2 = CONVERTER.convertNode(transit_node2,'gtfs','gtfs',to_type='feed')
+    
+
+
             try:
                 temp = nx.multi_source_dijkstra(GRAPH, [source], target=target, weight='c0'); #Dumbfunctions
                 distance = temp[0];
@@ -4537,6 +7566,7 @@ class NETWORK:
             SEG.uncongested = {};
             SEG.uncongested['path'] = path;
             SEG.uncongested['costs'] = {}; 
+            SEG.uncongested['costs']['dist'] = distance;
             SEG.uncongested['costs']['time'] = distance;
             SEG.uncongested['costs']['money'] = 0;
             SEG.uncongested['costs']['conven'] = 0;
@@ -4572,7 +7602,7 @@ class NETWORK:
 
 class PERSON:
 
-    def __init__(self,person,CONVERTER,GRAPHS,FEEDS,NETWORKS,ONDEMAND,PRE,params): 
+    def __init__(self,person,CONVERTER,GRAPHS,FEEDS,NETWORKS,ONDEMAND,PRE,params,current_trip_num): 
 
         mass_scale = 1.;
         modes = params['modes']
@@ -4591,6 +7621,9 @@ class PERSON:
 
 
 
+
+
+
         # if np.mod(i,print_interval)==0:
         #     end_time3 = time.time()
         #     if verbose:
@@ -4603,6 +7636,8 @@ class PERSON:
         self.GRAPHS = GRAPHS
         self.FEEDS = FEEDS;
         self.ONDEMAND = ONDEMAND;
+
+        self.person_id = person;
 
         self.mass = None; 
         self.current_choice = None;
@@ -4620,6 +7655,8 @@ class PERSON:
 
         self.am =  int(1);
         self.wc = int(0);
+
+        self.trip_ids = [];
 
 
         self.pickup_time_window_start = 0;
@@ -4951,7 +7988,10 @@ class PERSON:
                 ### TIME SINK ### TIME SINK ### TIME SINK ### TIME SINK ### TIME SINK ### TIME SINK             
                 start_time = time.time()
                 # TRIP = makeTrip(segs,nodes_temp,NODES,deliveries_temp2,deliveries_temp)
-                self.trips[segs] = TRIP(segs,nodes_temp,CONVERTER,deliveries_temp2);#,deliveries_temp);
+                trip_id = 'trip'+str(int(current_trip_num))
+                self.trips[segs] = TRIP(trip_id,segs,nodes_temp,CONVERTER,deliveries_temp2);#,deliveries_temp);
+                current_trip_num = current_trip_num + 1;
+                self.trip_ids.append(trip_id)
                 end_time = time.time()
             #print('time to make trip: ',np.round(end_time-start_time,4))
 
