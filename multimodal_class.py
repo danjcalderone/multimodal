@@ -1,3 +1,20 @@
+
+import os
+#### path to folder with VRP solver module
+path_to_VRPsolver = '/Users/dan/Documents/transit_webapp/' ### UPDATE FOR YOUR SYSTEM...
+path_to_multimodalsim = '/Users/dan/Documents/multimodal/'
+
+os.chdir(path_to_VRPsolver)
+from core import db, optimizer
+import config
+from common.helpers import _internalrequest
+os.chdir(path_to_multimodalsim)
+
+
+
+
+
+
 import numpy as np
 import numpy.linalg as mat
 import scipy as sp
@@ -27,9 +44,9 @@ from shapely.geometry import Polygon, Point, LineString
 
 import sklearn as sk
 from sklearn import cluster as cluster
-from sklearn.cluster import OPTICS, cluster_optics_dbscan
+# from sklearn.cluster import OPTICS, cluster_optics_dbscan
 from sklearn import metrics
-from sklearn.cluster import DBSCAN
+# from sklearn.cluster import DBSCAN
 
 from scipy.spatial import ConvexHull, convex_hull_plot_2d
 
@@ -50,10 +67,10 @@ import pygris
 import os
 
 
-os.chdir('/Users/dan/Documents/transit_webapp/')
-from core import db, optimizer
-import config
-from common.helpers import _internalrequest
+# os.chdir('/Users/dan/Documents/transit_webapp/')
+# from core import db, optimizer
+# import config
+# from common.helpers import _internalrequest
 
 
 ### NEWER STUFF ### NEWER STUFF ### NEWER STUFF ### NEWER STUFF ### NEWER STUFF 
@@ -1226,7 +1243,7 @@ def CONVERT_CSV_TO_PRE_FORMAT(GRAPHS,VEHS, SEG_TYPES, minz, maxz, csv_file_path)
     #     mass: number of people
     # Read the CSV file into a pandas DataFrame
     df = pd.read_csv(csv_file_path)
-    
+    # df = df.iloc[:40]
             
     
     # socio_economic_fp = './data/census_data_hamiliton/2021_census_tract_hamilton.geojson' # Socio economic data path
