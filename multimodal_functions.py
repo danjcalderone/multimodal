@@ -11528,7 +11528,6 @@ def generateLayers(GRAPHS,NODES,SIZES,DELIVERY,WORLD,params,use_all_trips=False)
 def plotLAYERS(GRAPHS,folder,layers):
     print('starting layers...')
 
-
     for i,layer in enumerate(layers):
         print('drawing layer: ',layer)
         LAYER = layers[layer]

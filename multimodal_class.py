@@ -11,7 +11,11 @@ from common.helpers import _internalrequest
 os.chdir(path_to_multimodalsim)
 
 
-
+import plotly.express as px
+import plotly.graph_objects as go
+import skimage.io as sio
+from PIL import Image, ImageSequence
+from plotly.subplots import make_subplots
 
 
 
@@ -204,7 +208,7 @@ def add_logistic_values (PRE, tag,
 ########### BASIC ########### BASIC ########### BASIC ########### BASIC ########### BASIC 
 
 class DASHBOARD:
-    def __init__(self,version='version0'): #,params,folder):
+    def __init__(self,dash_folder,version='version0'): #,params,folder):
         # self.GRAPHS = params['GRAPHS']
         # self.CONVERTER = params['CONVERTER'];
         # self.ONDEMAND = params['ONDEMAND'];
@@ -213,27 +217,35 @@ class DASHBOARD:
         # self.size = (0,0);
 
         self.DATAINDS = {}
+        self.folder = dash_folder + '/'
 
-        
-        
         self.version = version; #'version0'
         if self.version == 'version0':
 
-            self.width = 900; self.height = 900; 
+            self.width = 800; self.height = 900; 
             self.numx = 12; self.numy = 12;
-            self.row_heights = [0.083,0.083,0.083,0.083,0.083,0.083,
-                                0.083,0.083,0.083,0.083,0.083,0.083];
-            self.column_widths = [0.25,0.025,0.13,0.025,0.07,0.025,
-                                  0.25,0.025,0.13,0.025,0.07,0.025];
+            # self.row_heights = [0.083,0.083,0.083,0.083,0.083,0.083,0.083,0.083,0.083,0.083,0.083,0.083];
+            # self.column_widths = [0.25,0.025,0.13,0.025,0.07,0.025,0.25,0.025,0.13,0.025,0.07,0.025];
+
+            # pads = 't','b','l','r';
+            gpads = [0.025,0.025,0.,0.]
+
+            pp = gpads[0]+gpads[1]; nn = 4;
+            dy = 1.0/12;
+
+            self.row_heights = [dy+gpads[0]-pp/nn,dy-pp/nn,dy-pp/nn,dy+gpads[1]-pp/nn,
+                                dy+gpads[0]-pp/nn,dy-pp/nn,dy-pp/nn,dy+gpads[1]-pp/nn,
+                                dy+gpads[0]-pp/nn,dy-pp/nn,dy-pp/nn,dy+gpads[1]-pp/nn]
+            self.column_widths = [0.325,0.0,0.115,0.0,0.085,0.0,0.325,0.0,0.115,0.0,0.085,0.0]
             # list(0.15*np.ones(self.numx))
             self.SLIDERS = {};
             self.list_of_sliders = [];
             self.buttons = {};
 
-            self.slider_names = ['drive','walk','ondemand','gtfs','ondemand_grp','gtfs_grp']; #'gtfs_run','ondemand_grp','ondemand_run']
+            self.slider_names = ['drive','walk','ondemand','gtfs','ondemand_grp'];#,'gtfs_grp']; #'gtfs_run','ondemand_grp','ondemand_run']
             # self.slider_locs = [(0.7,0.3),(0.7,0.5),(0.9,0.1),(0.9,0.5)]; 
-            self.slider_grid_locs = [[8,8],[4,8],[0,0],[0,6],[0,2],[0,8]];
-            self.slider_hpads = [[-0.3,0.3],[-0.3,0.3],[-0.1,0.1],[-0.1,0.1],[-0.1,0.1],[-0.1,0.1]];
+            self.slider_grid_locs = [[4,8],[8,8],[11.99,0],[11.99,6],[11.99,2]];#,[11.9,8]];
+            self.slider_hpads = [[-0.2,0.1],[-0.2,0.2],[0.0,0.1],[-0.1,0.1],[-0.1,0.1],[-0.1,0.1]];
             self.slider_grid_lengths = [3,3,1,1,1,1];
             # self.slider_locs = [(0.7,0.7),(0.7,0.5),(0.,0.),(0.5,0.)];
             self.slider_lengths = []
@@ -242,16 +254,18 @@ class DASHBOARD:
             self.button_names = ['sort_by'];
             self.button_locs = [(0.7,0.3)]; #,(0.7,0.5),(0.9,0.1),(0.9,0.5)]; 
 
+            self.imgpad = [0.01,0.01,0.01,0.01]
+
 
             
             # pads = 't','b','l','r';
-            rpads = [0,0,0,0]
+            rpads = [0.005,0.005,0.01,0.01]
             rmargs = [0,0,0,0];
             rpads2 = [0,0,0,0.01];
             rmargs2 = [0,0,0,0];
 
             modes = ['drive','walk','ondemand','gtfs'];
-            factors = ['dist','time','money','conven','switches'];
+            factors = ['dist','time','money','switches'];
             self.factors = factors;
             inds1 = [0,1,2,3]
             inds2 = [0,1,2,3,4,5]
@@ -310,23 +324,27 @@ class DASHBOARD:
                         fulltag = mode + '_' + factor + '_' + tag
 
                         rind = rinds[fulltag]; dind = dinds[fulltag];
-                        rpad = rpads; rmarg = rmargs;
+                        rpad = rpads.copy(); rmarg = rmargs;
                         if tag == 'box': rpad = rpads2;
-                        
+
+                        if factor == 'dist': rpad[0] = gpads[0];
+                        if factor == 'switches': rpad[1] = gpads[1];
                         
                         self.subplts[fulltag] = {'rinds':rind,'dinds':dind,'rpads':rpad,'rmargs':rmarg}
                                                             # 'rloc':rlocs[factor + tag],
                                                             # 'rdims':rdims[factor + tag],
-                                                 
 
-                    
                     if mode in ['ondemand','gtfs']:
                         addtags = ['bar_grp','box_grp','bar_run','box_run'];
                         for tag in addtags:
                             fulltag = mode + '_' + factor + '_' + tag
                             rind = rinds[fulltag]; dind = dinds[fulltag];
-                            rpad = rpads; rmarg = rmargs;
+                            rpad = rpads.copy(); rmarg = rmargs;
                             if tag == 'box_run' or tag == 'box_grp': rpad = rpads2;
+
+                            if factor == 'dist': rpad[0] = gpads[0];
+                            if factor == 'switches': rpad[1] = gpads[1];
+
                             self.subplts[fulltag] = {'rinds':rind,'dinds':dind,'rpads':rpad,'rmargs':rmarg}
                                                             # 'rloc':rlocs[factor + tag],
                                                             # 'rdims':rdims[factor + tag],
@@ -335,8 +353,6 @@ class DASHBOARD:
     def makeGrid(self):
         self.grid = [[{} for _ in range(self.numx)] for j in range(self.numy)]
         self.plts = {};
-
-
         for pltgrp in self.pltgrps:
             PLTGRP = self.pltgrps[pltgrp];
             # gloc = PLTGRP['loc'];
@@ -353,8 +369,6 @@ class DASHBOARD:
                 ind = (gind[0]+rind[0],gind[1]+rind[1])
                 rpad = SUBPLT['rpads'];
                 pad = rpad
-
-                
                 self.plts[subplt] = {};
                 self.plts[subplt]['inds'] = ind
                 self.plts[subplt]['dinds'] = dind
@@ -362,30 +376,89 @@ class DASHBOARD:
                 # self.plts[subplt]['loc'] = [gloc[0] + gidims[0]*rlocs[0],gloc[1]+gidims[1]*rlocs[1]];
                 # self.plts[subplt]['dims'] = [gidims[0]*rdims[0],gidims[1]*rdims[1]];
 
+        self.plts['img1'] = {'inds':[1,1],'dinds':[8,8],'pads':self.imgpad};
+ 
         for plt in self.plts:
             PLT = self.plts[plt]
-            ind = PLT['inds']; dind = PLT['dinds']
+            ind = PLT['inds'];
+            dind = PLT['dinds']
             pad = PLT['pads']; #marg = PLT['margs'];            
-            self.grid[ind[0]-1][ind[1]-1] = {"rowspan":dind[0], "colspan":dind[1],
-                                               "t": pad[0],"b": pad[1],"l": pad[2],"r": pad[3]}; #,"type": "image"}] + [None for _ in range(2*num_fig_cols-1)] + [{},{}]
+            self.grid[ind[0]-1][ind[1]-1] = {"rowspan":dind[0], "colspan":dind[1],"t": pad[0],"b": pad[1],"l": pad[2],"r": pad[3]}; #,"type": "image"}] + [None for _ in range(2*num_fig_cols-1)] + [{},{}]
 
+
+    def show(self):
+        fig = make_subplots(rows=self.numy,cols=self.numx,
+                            column_widths = self.column_widths,
+                            row_heights = self.row_heights,
+                            horizontal_spacing=0.0,#list(0.02*np.ones(12)),
+                            vertical_spacing=0.0,
+                            specs=self.grid);
+                            # print_grid=True); 
+        self.fig = fig;
+        # for plt in self.plts:
+        #     PLT = self.plts[plt]
+        #     inds = PLT['inds']
+        #     fig.add_trace(go.Scatter(x=[300, 400, 500], y=[600, 700, 800]),row=inds[0],col=inds[1]);
+
+
+        self.TRACES = {};
+        self.addTraces();
+        self.addSliders();
+        self.connectSliders();
+
+        
+        # self.addButtons();
+        self.fig.update_layout(width=self.width,height=self.height,showlegend=False); #dims[0],height=dims[1],boxmode='group'); #, xaxis_visible=False, yaxis_visible=False)
+        temp = [SLIDER.dict for SLIDER in self.SLIDERS.values()]
+        self.fig.update_layout(sliders=temp)
+
+
+        self.fig.update_xaxes(showticklabels=False) 
+        self.fig.update_yaxes(showticklabels=False)
+            # self.list_of_sliders);
+        # fig.update_layout(updatemenus=BUTTONS)
+        # fig.update_layout(sliders=SLIDERS)
+# width = np.sum(column_widths); height = 1.2*np.sum(row_heights); #+padb1*3)
+# fig.update_layout(width=width, height=height, xaxis_visible=False, yaxis_visible=False)
+
+        fig.show()
+
+    def addImages(self,layers ):
+        self.image_names = [];
+        for layer in layers:
+            LAYER = layers[layer];
+            self.image_names.append(LAYER['name']);
 
     def addTraces(self):
-        self.TRACES = {};
         DFs = self.dataDFs;
-
         factors = ['dist','time','money','switches']
         factors2 = ['distance','travel_time','money','switches']
         show_boxes = False; 
+
+        IMGPLT = self.plts['img1'];
+
+        img_names = ['base','lines','source','target','drive','walk','ondemand','gtfs']
+        for name in img_names:
+            filename =  self.folder + name + '.png'
+            if os.path.isfile(filename): 
+                params = {}; 
+                params['name'] = name
+                params['filename'] = filename;
+                params['loc'] = IMGPLT['inds'];
+                # blarg = {'turnoninds':[j]}; #int(10*np.random.rand(1))}
+                # params['sliders'] = {mode: blarg};
+                params['typ'] = 'image'
+                params['init_visible'] = True;
+                self.TRACES[name] = TRACE(self.fig,params)                                         
+                self.TRACES[name].add();     
+
+
 
         ####### 
         for mode in DFs:
             DF = DFs[mode];
             for i,factor in enumerate(factors):
-
                 sortby = 'sorted_by_travel_time';
-                
-                blarg = {'turnoninds':[int(10*np.random.rand(1))]}
                 params = {};
                 plt = mode + '_' + factor + '_bar'
                 name = mode + '_bar_' + 'all'; params['name'] = name
@@ -400,22 +473,53 @@ class DASHBOARD:
                 params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.3;
                 # params['sliders'] = {mode:blarg};
                 params['typ'] = 'bar'
+                params['init_visible'] = True;
                 self.TRACES[name] = TRACE(self.fig,params)
+                self.TRACES[name].add();
 
                 plt = mode + '_' + factor + '_bar'
                 PLT = self.plts[plt]
-                for j,x in enumerate(xx):#[:30]):
-                    blarg = {'turnoninds':[j]}; #int(10*np.random.rand(1))}
-                    params = {};                    
-                    name = mode + '_'+factor+'_bar_' + str(x); params['name'] = name
-                    params['loc'] = PLT['inds'];
-                    params['x'] = [x]; params['y'] = [yy[j]]
-                    params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.8;
-                    params['sliders'] = {mode:blarg};
-                    params['typ'] = 'bar'
-                    self.TRACES[name] = TRACE(self.fig,params)
+                if True: #factor == 'time':
+                    for j,x in enumerate(xx):#[:30]):
+                        blarg = {'turnoninds':[j]}; #int(10*np.random.rand(1))}
+                        params = {};                    
+                        name = mode + '_'+factor+'_bar_' + str(x); params['name'] = name
+                        params['loc'] = PLT['inds'];
+                        params['x'] = [x]; params['y'] = [yy[j]]
+                        params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.8;
+                        params['sliders'] = {mode:blarg};
+                        params['typ'] = 'bar'
+                        if j==0:  params['init_visible'] = True;
+                        else:  params['init_visible'] = False;
+                        self.TRACES[name] = TRACE(self.fig,params)
+                        self.TRACES[name].add();
 
 
+                        if factor == 'time':
+                            start_node = DF.iloc[j]['start_node']
+                            end_node = DF.iloc[j]['end_node']
+                            if isinstance(start_node,float): start_node = int(start_node);
+                            if isinstance(end_node,float): end_node = int(end_node);
+                            if isinstance(start_node,int): start_node = str(start_node)
+                            if isinstance(end_node,int): end_node = str(end_node)
+                            name = 'img_' + mode + '_' + start_node + '_' + end_node
+                            filename =  self.folder + mode + '_trips/';
+                            filename = filename + mode + '_' + start_node + '_' + end_node + '.png'
+                            if os.path.isfile(filename): 
+                                params = {}; 
+                                params['name'] = name
+                                params['filename'] = filename;
+                                params['loc'] = IMGPLT['inds'];
+                                blarg = {'turnoninds':[j]}; #int(10*np.random.rand(1))}
+                                params['sliders'] = {mode: blarg};
+                                params['typ'] = 'image'
+                                if j==0:  params['init_visible'] = True;
+                                else:  params['init_visible'] = False;
+
+                                self.TRACES[name] = TRACE(self.fig,params)                                         
+                                self.TRACES[name].add();                        
+
+                        # if True: mode == 'drive' or mode == 'walk' or mode == 'ondemand':
 
                 # if show_boxes:
                 #     plt = mode + '_' + factor + '_box'
@@ -427,7 +531,11 @@ class DASHBOARD:
                 #     self.TRACES[name] = TRACE(self.fig,params)
 
 
-                if mode in ['ondemand','gtfs']:
+                if mode in ['ondemand']:#,'gtfs']:
+
+                    if mode == 'ondemand': grp_tag = 'group_id'; run_tag = 'run_id'
+                    if mode == 'gtfs': grp_tag = 'line_id'; run_tag = 'bus_trip_id';
+
                     plt1 = mode + '_' + factor + '_bar'
                     plt2 = mode + '_' + factor + '_bar_grp'
                     PLT1 = self.plts[plt1]
@@ -435,25 +543,35 @@ class DASHBOARD:
                     factor2 = factors2[i]
 
 
-                    group_ids = DF['group_ids'].unique()
+                    group_ids = DF[grp_tag].unique()
                     for j,group_id in enumerate(group_ids):
-                        DF2 = DF[DF['group_ids'] == group_id]
+
+
+                        DF2 = DF[DF[grp_tag] == group_id]
                         xx2 = np.array(list(DF2[sortby]));
                         yy2 = np.array(list(DF2[factor2]))
                         # print(group_id)
                         # print(len(yy2))
 
                         params = {};
+
+                        if not(isinstance(group_id,str)): group_id = str(group_id)
+
                         name = mode + '_' + factor + 'bar_grp_' + group_id;
                         params['name'] = name
                         params['loc'] = PLT['inds'];
                         params['x'] = np.array(list(range(len(xx2))))+1;
                         params['y'] = yy2
-                        params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.5;
+                        params['color'] = 'rgb(0,0,0)';
+                        params['opacity'] = 0.5;
                         blarg = {'turnoninds':[j]}; #int(10*np.random.rand(1))}
                         params['sliders'] = {mode+'_grp':blarg};
                         params['typ'] = 'bar'
+                        if j==0:  params['init_visible'] = True;
+                        else:  params['init_visible'] = False;
+
                         self.TRACES[name] = TRACE(self.fig,params)
+                        self.TRACES[name].add();
 
                         params = {};
                         name = mode + '_' + factor + 'bar_all_grp_' + group_id;
@@ -464,7 +582,12 @@ class DASHBOARD:
                         blarg = {'turnoninds':[j]}; #int(10*np.random.rand(1))}
                         params['sliders'] = {mode+'_grp':blarg};
                         params['typ'] = 'bar'
-                        self.TRACES[name] = TRACE(self.fig,params)                        
+                        if j==0:  params['init_visible'] = True;
+                        else:  params['init_visible'] = False;
+
+                        self.TRACES[name] = TRACE(self.fig,params)
+                        self.TRACES[name].add();
+
 
                     # if show_boxes:
                     #     plt = mode + '_' + factor + '_box_grp'
@@ -474,19 +597,20 @@ class DASHBOARD:
                     #     params['loc'] = PLT['inds']
                     #     self.TRACES[name] = TRACE(self.fig,params)
 
-                    if False:
-                        plt = mode + '_' + factor + '_bar_run'
-                        PLT = self.plts[plt]
-                        factor2 = factors2[i]
-                        xx = list(DF[sortby]); yy = list(DF[factor2])
-                        params = {};
-                        name = mode + '_bar_' + 'all'; params['name'] = name
-                        params['loc'] = PLT['inds'];
-                        params['x'] = xx; params['y'] = yy
-                        params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.5;
-                        params['sliders'] = {mode:blarg};
-                        params['typ'] = 'bar'
-                        self.TRACES[name] = TRACE(self.fig,params)
+                    # if False:
+                    #     plt = mode + '_' + factor + '_bar_run'
+                    #     PLT = self.plts[plt]
+                    #     factor2 = factors2[i]
+                    #     xx = list(DF[sortby]); yy = list(DF[factor2])
+                    #     params = {};
+                    #     name = mode + '_bar_' + 'all'; params['name'] = name
+                    #     params['loc'] = PLT['inds'];
+                    #     params['x'] = xx; params['y'] = yy
+                    #     params['color'] = 'rgb(0,0,0)'; params['opacity'] = 0.5;
+                    #     params['sliders'] = {mode:blarg};
+                    #     params['typ'] = 'bar'
+                    #     self.TRACES[name] = TRACE(self.fig,params)
+                    #     self.TRACES[name].add();
 
                     # if show_boxes:
                     #     plt = mode + '_' + factor + '_box_run'
@@ -497,11 +621,6 @@ class DASHBOARD:
                     #     self.TRACES[name] = TRACE(self.fig,params)
 
 
-
-
-
-
-
     def connectSliders(self):
         for trace in self.TRACES:
             TRACE = self.TRACES[trace];
@@ -510,6 +629,14 @@ class DASHBOARD:
                 dataind = TRACE.dataind;
                 turnoninds = slider_data['turnoninds'];
                 self.SLIDERS[slider].addTrace(turnoninds,dataind)
+
+        # for image in self.IMAGES:
+        #     IMAGE = self.IMAGES[image];
+        #     for slider in TRACE.sliders:
+        #         slider_data = TRACE.sliders[slider];
+        #         dataind = TRACE.dataind;
+        #         turnoninds = slider_data['turnoninds'];
+        #         self.SLIDERS[slider].addDataInd(turnoninds,dataind)                
 
         for slider in self.SLIDERS:
             SLIDER = self.SLIDERS[slider];
@@ -544,14 +671,15 @@ class DASHBOARD:
 
 
             col_wid = self.column_widths[gloc1]*self.width;
-
+            # row_hgt = self.column_widths[gloc0]*self.width;
             # print(loc0)
             # print()
+            print(np.sum(self.row_heights))
 
-            params['loc'] = [loc1,loc0]
+            params['loc'] = [loc1,1.-float(loc0)]
             params['length'] = slider_len
             params['pad'] = {'t':0,'b':0,'l':hpad[0]*col_wid,'r':hpad[1]*col_wid};
-
+            print(params['loc'])
             params['name'] = name;
             params['active'] = True;
             self.SLIDERS[name] = SLIDER(params)
@@ -559,15 +687,19 @@ class DASHBOARD:
 
 
 
-    def addOutputs(self,OUTPUTS):
+    def addOutputs(self,OUTPUTS,use_active=False):
         # self.OUTPUTS = OUTPUTS;
         factors = ['distance','travel_time','money','switches']
         modes = ['drive','walk','ondemand','gtfs'];
         DFs = {};
+        main_cols = ['distance','travel_time','money','switches','start_node','end_node']
         for mode in modes:
-            if mode in ['drive','walk']: cols = ['distance','travel_time','money','switches']
-            if mode in ['ondemand','gtfs']: cols = ['distance','travel_time','money','switches','group_ids','run_ids']
+            if mode in ['drive','walk']: cols = main_cols
+            if mode in ['ondemand']: cols = main_cols + ['group_id','run_id']
+            if mode in ['gtfs']: cols = main_cols + ['line_id','bus_trip_id']
             df = OUTPUTS['by_mode'][mode]
+            if use_active:
+                df = df[df['active']==True];
             df = df[cols]
             for factor in factors:
                 df = df.sort_values(by=[factor])
@@ -576,41 +708,6 @@ class DASHBOARD:
         self.dataDFs = DFs
 
 
-    def show(self):
-        fig = make_subplots(rows=self.numy,cols=self.numx,
-                            column_widths = self.column_widths,
-                            row_heights = self.row_heights,
-                            horizontal_spacing=0.0,#list(0.02*np.ones(12)),
-                            vertical_spacing=0.0,
-                            specs=self.grid);
-                            # print_grid=True); 
-        self.fig = fig;
-        # for plt in self.plts:
-        #     PLT = self.plts[plt]
-        #     inds = PLT['inds']
-        #     fig.add_trace(go.Scatter(x=[300, 400, 500], y=[600, 700, 800]),row=inds[0],col=inds[1]);
-
-
-        self.addTraces();
-        self.addSliders();
-        self.connectSliders();
-
-        
-        # self.addButtons();
-        self.fig.update_layout(width=self.width,height=self.height,showlegend=False); #dims[0],height=dims[1],boxmode='group'); #, xaxis_visible=False, yaxis_visible=False)
-        temp = [SLIDER.dict for SLIDER in self.SLIDERS.values()]
-        self.fig.update_layout(sliders=temp)
-
-
-        self.fig.update_xaxes(showticklabels=False) 
-        self.fig.update_yaxes(showticklabels=False)
-            # self.list_of_sliders);
-        # fig.update_layout(updatemenus=BUTTONS)
-        # fig.update_layout(sliders=SLIDERS)
-# width = np.sum(column_widths); height = 1.2*np.sum(row_heights); #+padb1*3)
-# fig.update_layout(width=width, height=height, xaxis_visible=False, yaxis_visible=False)
-
-        fig.show()
 
     def addButtons(self):
         list_of_buttons = [];
@@ -626,29 +723,220 @@ class DASHBOARD:
         # fig.update_layout(width=width, height=height, xaxis_visible=False, yaxis_visible=False)
 
 
-# class TRACE:
-#     def __init__(self,params = {}):
-#         self.image = None;
-#         self.name = None
-#         self.x = None
-#         self.y = None
-#         self.sliders = {};#'':{},
-#         self.loc = None;
-#         self.dataind = None
-#         if 'name' in params: self.name = params['name'];
-#         if 'image' in params: self.image = params['image'];
-#         if 'x' in params: self.x = params['x'];
-#         if 'y' in params: self.y = params['y'];
-#         if 'loc' in params: self.loc = params['loc']
-#         if 'dataind' in params: self.dataind = params['dataind'];
-#         if 'sliders' in params: self.sliders = params['sliders'];
 
-#     def show(self,fig):
-#         fig.add_trace(go.Bar(x=self.x,y=self.y),row=loc[0],col=loc[1]);
-#         #     fig.add_trace(go.Bar(x=counts2,y=costs2,width=0.5,base ='overlay',marker = {'color' :color,'opacity':0.5}),inds2[0],inds2[1])
+
+
+    def sortingData(WORLD,GRAPHS,DELIVERY,factor='time',use_all_trips=False):
+        modes = ['drive','walk','gtfs','ondemand']
+        maxcosts = {'drive': 10000,'walk': 10000,'gtfs': 1000000000,'ondemand': 10000}
+        tripsSorted = {}
+        total_costs = [];
+        total_costs0 = [];
+
+        try: 
+            for _,group in enumerate(DELIVERY['groups']):
+                payload = DELIVERY['groups'][group]['current_payload'];
+                manifest = DELIVERY['groups'][group]['current_manifest'];
+                PDF = payloadDF(payload,GRAPHS,include_drive_nodes = True);
+                MDF = manifestDF(manifest,PDF)
+                # ZZ = MDF[MDF['run_id']==1]
+                # zz = list(ZZ.sort_values(['scheduled_time'])['drive_node'])
+                PLANS = routesFromManifest(MDF,GRAPHS)
+                # PATHS = routeFromStops(zz,GRAPHS['drive'])
+                ONDEMAND_EDGES[group] = [PLANS[plan]['edges'] for _,plan in enumerate(PLANS)]
+                # DELIVERY_TAGS[group] = []
+                for i,plan in enumerate(PLANS):
+                    tags.append(group+'_delivery'+str(i))
+        except:
+            pass
+
+        ONDEMAND_TRIPS = {};
+        for _,group in enumerate(DELIVERY['groups']):
+            if 'current_payload' in DELIVERY['groups'][group]:
+                payload = DELIVERY['groups'][group]['current_payload'];
+                manifest = DELIVERY['groups'][group]['current_manifest'];
+                PDF = payloadDF(payload,GRAPHS,include_drive_nodes = True);
+                MDF = manifestDF(manifest,PDF)
+                PLANS = singleRoutesFromManifest(MDF,GRAPHS)
+                ONDEMAND_TRIPS[group] = [];
+                for runid in PLANS:
+                    PLAN = PLANS[runid];
+                    for trip in PLAN:
+                        ONDEMAND_TRIPS[group].append(trip)
+
+
+        ########################################################################################
+        ########################################################################################
+        ########################################################################################
+        ########################################################################################
+
+
+        factors = ['time','money','conven','switches']
+
+        for m,mode in enumerate(modes):
+            tripsSorted[mode] = {}
+
+            if use_all_trips:
+                active_trips = list(WORLD[mode]['trips'])
+            else: 
+                active_trips = list(WORLD[mode]['active_trips'])
+
+            if mode == 'ondemand':
+                tripsSorted[mode]['groups'] = {};
+        
+            active_costs = [];
+            active_costs0 = [];
+
+
+            ACTIVE_COSTS = {'time':[],'money':[],'conven':[],'switches':[]};
+
+            for i,trip in enumerate(active_trips):
+                TRIP = WORLD[mode]['trips'][trip]
+                # print(TRIP.keys())
+                # cost0 = 100000000;
+
+                if mode == 'ondemand':
+                    cost = TRIP['costs'][factor][-1]
+                    if 'uncongested' in TRIP: cost0 = TRIP['uncongested']['costs'][factor]
+                    else: cost0 = 10000000;
+                    if cost < 100000 and cost0 < 100000:
+                        active_costs.append(TRIP['costs'][factor][-1])
+                        active_costs0.append(cost0)
+
+                elif mode == 'gtfs':
+                    cost = TRIP['costs'][factor][-1]
+                    if cost < 100000:
+                        active_costs.append(cost)
+                        active_costs0.append(cost)
+
+                else:
+                    cost = TRIP['costs']['current_'+factor];
+                    if 'uncongested' in TRIP: cost0 = TRIP['uncongested']['costs'][factor]
+                    else: cost0 = 10000000;
+                    if cost < 1000000 and cost0 < 1000000:
+                        active_costs.append(cost)
+                        active_costs0.append(cost0)
+        
+            total_costs = total_costs + active_costs;    
+            total_costs0 = total_costs0 + active_costs0;
+            active_costs = np.array(active_costs);
+            active_costs0 = np.array(active_costs0);
+            inds = np.argsort(active_costs);
+            active_costs = active_costs[inds]
+            active_costs0 = active_costs0[inds]
+            active_trips = [active_trips[ind] for i,ind in enumerate(inds)];
+
+            if mode == 'ondemand':
+                for _,group in enumerate(DELIVERY['groups']):
+                    tripsSorted[mode]['groups'][group] = {'costs': [], 'trips':[],'overall_counts':[],'group_counts':[],'runs':{},
+                                                          'costs0':[]}
+                # for i,trip in enumerate(active_trips):
+                for i,trip in enumerate(active_trips): #ONDEMAND_TRIPS[group]):
+                    # try: 
+                    TRIP = WORLD[mode]['trips'][trip]
+                    group = TRIP['group'];
+                    cost = active_costs[i]
+                    cost0 = active_costs0[i];
+                    tripsSorted[mode]['groups'][group]['costs'].append(cost)
+                    tripsSorted[mode]['groups'][group]['costs0'].append(cost0)
+                    tripsSorted[mode]['groups'][group]['trips'].append(trip)
+                    tripsSorted[mode]['groups'][group]['overall_counts'].append(i)
+
+                    len1 = len(tripsSorted[mode]['groups'][group]['group_counts']);
+                    tripsSorted[mode]['groups'][group]['group_counts'].append(len1)
+
+                    if 'run_id' in TRIP:
+                        runid = TRIP['run_id'];
+                        if not(runid in tripsSorted[mode]['groups'][group]['runs']):
+                            tripsSorted[mode]['groups'][group]['runs'][runid] = {'costs0':[],'costs': [], 'trips':[],'overall_counts':[],'run_counts':[]};
+
+                        tripsSorted[mode]['groups'][group]['runs'][runid]['costs'].append(cost)
+                        tripsSorted[mode]['groups'][group]['runs'][runid]['costs0'].append(cost0)
+                        tripsSorted[mode]['groups'][group]['runs'][runid]['trips'].append(trip)
+                        tripsSorted[mode]['groups'][group]['runs'][runid]['overall_counts'].append(len1)
+                        len1 = len(tripsSorted[mode]['groups'][group]['runs'][runid]['run_counts']);
+                        tripsSorted[mode]['groups'][group]['runs'][runid]['run_counts'].append(len1)
+                    # except:
+                    #     pass;
+
+        
+            trips = WORLD[mode]['trips'];
+            not_active_trips = []
+            costs = [];
+            for i,trip in enumerate(trips):
+                if not(trip in active_trips):
+                    not_active_trips.append(trip)
+                    TRIP = WORLD[mode]['trips'][trip]
+                    if mode == 'ondemand':
+                        cost = TRIP['costs'][factor][-1]
+                        if cost < 100000:
+                            costs.append(TRIP['costs'][factor][-1])
+                    else:
+                        cost = TRIP['costs']['current_'+factor]
+                        if cost < 100000:
+                            costs.append(cost)
+            #total_costs = total_costs + costs;            
+            costs = np.array(costs);
+            inds = np.argsort(costs);
+            costs = costs[inds]
+            not_active_trips = [not_active_trips[ind] for i,ind in enumerate(inds)];
+        
+            tripsSorted[mode]['costs'] = list(active_costs);# + list(costs);
+            tripsSorted[mode]['costs0'] = list(active_costs0);# + list(costs);
+            tripsSorted[mode]['counts'] = list(range(len(active_costs)));# + list(costs);
+
+            tripsSorted[mode]['trips'] = active_trips; # + not_active_trips;
+            
+        maxcost = np.max(total_costs)
+        
+
+        ###############################################################
+        ###############################################################
+        ###############################################################
+        ###############################################################
+
+
+        convergeSorted = {};
+        itr = int(WORLD['main']['iter'])+1
+        for m,mode in enumerate(modes):
+        
+            convergeSorted[mode] = {}
+            convergeSorted[mode]['cost_trajs'] = [];
+            for tt,trip in enumerate(WORLD[mode]['trips']):#active_trips):
+                
+                
+                
+                costs = WORLD[mode]['trips'][trip]['costs'][factor]
+                costs = np.array(costs)
+                costs = costs[np.where(costs<maxcosts[mode])]  
+        
+                if mode == 'ondemand':
+                    costs = costs[-itr:]
+                
+                try:
+                    if len(costs)>0:
+                        if costs[-1]<1000000.:
+                            convergeSorted[mode]['cost_trajs'].append(costs.copy())
+                except:
+                    pass
+            if mode == 'ondemand':
+                convergeSorted[mode]['expected_cost'] = WORLD[mode]['expected_cost'];
+
+
+        OUT = {};
+        OUT['trips_sorted'] = tripsSorted;
+        OUT['converge_sorted'] = convergeSorted;
+        return OUT
+
+
+
+
+
 
 class TRACE:
     def __init__(self,fig,params = {}):
+
+        self.fig = fig;
         self.image = None;
         self.name = None
         self.x = None
@@ -656,37 +944,52 @@ class TRACE:
         self.sliders = {};#'':{},
         self.loc = None;
         self.dataind = None;
+        self.filename = None;
         self.color = [0,0,0];
         self.opacity = 0.7;
         self.typ = None;
+        self.init_visible = True;
+        self.bar_width = 1;
+
         if 'name' in params: self.name = params['name'];
         if 'image' in params: self.image = params['image'];
         if 'x' in params: self.x = params['x'];
         if 'y' in params: self.y = params['y'];
+        if 'filename' in params: self.filename = params['filename']
         if 'loc' in params: self.loc = params['loc']
         # if 'dataind' in params: self.dataind = params['dataind'];
         if 'sliders' in params: self.sliders = params['sliders'];
         if 'color' in params: self.color = params['color'];
         if 'opacity' in params: self.opacity = params['opacity'];
         if 'typ' in params: self.typ = params['typ']
-
-#                 fig.add_traces(go.Box(y=VALS,fillcolor=color,opacity=opac,marker_color=edgecolor,boxpoints=boxpoints,width=0.4,line={'width':1},name=series_name),inds[0],inds[1]);
-#             ###########
-    #         #     fig.add_trace(go.Bar(x=counts2,y=costs2,width=0.5,base ='overlay',marker = {'color' :color,'opacity':0.5}),inds2[0],inds2[1])
+        if 'init_visible' in params: self.init_visible = params['init_visible'];
 
         self.color = 'rgba(0,0,0)'
+
+    def add(self):
         if self.typ == 'bar':
-            fig.add_trace(go.Bar(x=self.x,y=self.y,base = 'overlay',
+            self.fig.add_trace(go.Bar(x=self.x,y=self.y,base = 'overlay',
                             marker = {'color':self.color,'opacity':self.opacity}),row=self.loc[0],col=self.loc[1]);
         if self.typ == 'box':
             edgecolor = 'rgba(0,0,0)'
             # boxpoints = 'all'
-            fig.add_traces(go.Box(
+            self.fig.add_traces(go.Box(
                            y=self.y,fillcolor=self.color,opacity=self.opacity,
                            marker_color=edgecolor,width=0.4,line={'width':1},name=self.name),
                            self.loc[0],self.loc[1]);
-        self.dataind = len(fig.data)-1;
+        if self.typ == 'image':
+            img = px.imshow(sio.imread(self.filename))
+            self.fig.add_trace(img.data[0], self.loc[0],self.loc[1])
 
+        if self.init_visible == False:
+            self.fig.data[-1].visible = False;
+
+        self.dataind = len(self.fig.data)-1;
+
+
+#                 fig.add_traces(go.Box(y=VALS,fillcolor=color,opacity=opac,marker_color=edgecolor,boxpoints=boxpoints,width=0.4,line={'width':1},name=series_name),inds[0],inds[1]);
+#             ###########
+    #         #     fig.add_trace(go.Bar(x=counts2,y=costs2,width=0.5,base ='overlay',marker = {'color' :color,'opacity':0.5}),inds2[0],inds2[1])
 
         # # for i in range(len(fig.data)): 
 # #     if not(i in all_start_inds):
@@ -729,17 +1032,40 @@ class SLIDER:
     #     ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS ### SLIDERS
 
     def addTrace(self,turnoninds,dataind):
-
         maxturnonind = int(np.max(turnoninds))
         if self.num_steps < maxturnonind + 1:
             new_num_steps = maxturnonind + 1;
             diff_size = new_num_steps - self.num_steps;
             self.turnoninds = self.turnoninds + [[] for _ in range(diff_size)];
             self.num_steps = new_num_steps
-
         for turnonind in turnoninds:
             self.turnoninds[turnonind].append(len(self.datainds));
-        self.datainds.append(dataind)
+        self.datainds.append(dataind)    
+
+    # def addImage(self,turnoninds,dataind):
+    #     maxturnonind = int(np.max(turnoninds))
+    #     if self.num_steps < maxturnonind + 1:
+    #         new_num_steps = maxturnonind + 1;
+    #         diff_size = new_num_steps - self.num_steps;
+    #         self.turnoninds = self.turnoninds + [[] for _ in range(diff_size)];
+    #         self.num_steps = new_num_steps
+    #     for turnonind in turnoninds:
+    #         self.turnoninds[turnonind].append(len(self.datainds));
+    #     self.datainds.append(dataind)
+
+
+
+    # def addTrace(self,turnoninds,dataind):
+    #     maxturnonind = int(np.max(turnoninds))
+    #     if self.num_steps < maxturnonind + 1:
+    #         new_num_steps = maxturnonind + 1;
+    #         diff_size = new_num_steps - self.num_steps;
+    #         self.turnoninds = self.turnoninds + [[] for _ in range(diff_size)];
+    #         self.num_steps = new_num_steps
+
+    #     for turnonind in turnoninds:
+    #         self.turnoninds[turnonind].append(len(self.datainds));
+    #     self.datainds.append(dataind)
         
 
     def addSteps(self):
@@ -1230,7 +1556,7 @@ def kmeans_nodes(num,mode,GRAPHS,node_set = 'all',find_nodes=True):
 
 
 
-def CONVERT_CSV_TO_PRE_FORMAT(GRAPHS,VEHS, SEG_TYPES, minz, maxz, csv_file_path):
+def CONVERT_CSV_TO_PRE_FORMAT(GRAPHS,VEHS, SEG_TYPES, minz, maxz, csv_file_path,max_num_people=None):
     
     #     CSV has columns:
     #     index
@@ -1243,7 +1569,8 @@ def CONVERT_CSV_TO_PRE_FORMAT(GRAPHS,VEHS, SEG_TYPES, minz, maxz, csv_file_path)
     #     mass: number of people
     # Read the CSV file into a pandas DataFrame
     df = pd.read_csv(csv_file_path)
-    # df = df.iloc[:40]
+    if not(max_num_people == None):
+        df = df.iloc[:max_num_people]
             
     
     # socio_economic_fp = './data/census_data_hamiliton/2021_census_tract_hamilton.geojson' # Socio economic data path
@@ -2420,21 +2747,74 @@ def generate_bnds(center_point):
     #         out = NODES['ondemand'][to_type][node]
     #     return out        
 
+# def convertNode(selg , node,from_mode,to_mode,from_type = 'graph',to_type = 'graph',verbose = False):
+
+#     """
+#     description -- converts nodes (at approx the same location) between two different graph types 
+#     inputs --
+#            node: node to convert
+#            from_type: initial mode node is given in
+#            to_type: desired node type
+#            NODES: node conversion dict - contains dataframes with conversion information
+#     returns --
+#            node in desired mode
+#     """
+#     #######
+#     from_mode2 = from_mode
+#     to_mode2 = to_mode;
+#     if from_type == 'feed': from_mode2 = 'feed_'+from_mode;
+#     if to_type == 'feed': to_mode2 = 'feed_'+to_mode
+#     # if not(from_mode2 in self.NINDS): self.addNodeToConverter(node,from_mode2,node_type=from_type):
+#     if not(node in selg.NINDS[from_mode2]): selg.addNodeToConverter(node,from_mode2,node_type=from_type)
+
+#     node_index = selg.NINDS[from_mode2][node];
+#     to_node = selg.NDF.loc[node_index][to_mode2]
+#     return to_node            
+
 class CONVERTER: 
     def __init__(self,params={}):
 
         self.modes = params['modes'];
         self.GRAPHS = params['GRAPHS']
         self.FEEDS = params['FEEDS']
-        
-
-        if 'NDF' in params: self.NDF = params['NDF']
-        else: self.NDF = pd.DataFrame({mode:[] for mode in self.modes},index=[])
-        if 'NINDS' in params: self.NINDS = params['NINDS'];
-        else: self.NINDS = {}
-        
+        self.NINDS = {};
         for mode in self.GRAPHS: self.NINDS[mode] = {};
         for mode in self.FEEDS: self.NINDS['feed_'+mode] = {};        
+
+ 
+
+        self.NDF = pd.DataFrame({mode:[] for mode in self.modes},index=[]);
+        if 'NDF' in params: self.NDF = params['NDF']
+        # else: self.NDF = pd.DataFrame({mode:[] for mode in self.modes},index=[])
+        if 'NINDS' in params: self.NINDS = params['NINDS'];
+        # else: self.NINDS = {}
+        
+
+
+    def convertNode(self , node,from_mode,to_mode,from_type = 'graph',to_type = 'graph',verbose = False):
+
+        """
+        description -- converts nodes (at approx the same location) between two different graph types 
+        inputs --
+               node: node to convert
+               from_type: initial mode node is given in
+               to_type: desired node type
+               NODES: node conversion dict - contains dataframes with conversion information
+        returns --
+               node in desired mode
+        """
+        #######
+        from_mode2 = from_mode
+        to_mode2 = to_mode;
+        if from_type == 'feed': from_mode2 = 'feed_'+from_mode;
+        if to_type == 'feed': to_mode2 = 'feed_'+to_mode
+        # if not(from_mode2 in self.NINDS): self.addNodeToConverter(node,from_mode2,node_type=from_type):
+        if not(node in self.NINDS[from_mode2]): self.addNodeToConverter(node,from_mode2,node_type=from_type)
+
+        node_index = self.NINDS[from_mode2][node];
+        to_node = self.NDF.loc[node_index][to_mode2]
+        return to_node            
+
 
 
     def findClosestNode(self,node,from_mode,to_mode,from_type='graph',to_type='graph'):
@@ -2558,29 +2938,7 @@ class CONVERTER:
             self.NDF = pd.concat([self.NDF,new_nodes]);
 
 
-    def convertNode(self,node,from_mode,to_mode,from_type = 'graph',to_type = 'graph',verbose=False):
 
-        """
-        description -- converts nodes (at approx the same location) between two different graph types 
-        inputs --
-               node: node to convert
-               from_type: initial mode node is given in
-               to_type: desired node type
-               NODES: node conversion dict - contains dataframes with conversion information
-        returns --
-               node in desired mode
-        """
-        #######
-        from_mode2 = from_mode
-        to_mode2 = to_mode;
-        if from_type == 'feed': from_mode2 = 'feed_'+from_mode;
-        if to_type == 'feed': to_mode2 = 'feed_'+to_mode
-        # if not(from_mode2 in self.NINDS): self.addNodeToConverter(node,from_mode2,node_type=from_type):
-        if not(node in self.NINDS[from_mode2]): self.addNodeToConverter(node,from_mode2,node_type=from_type)
-
-        node_index = self.NINDS[from_mode2][node];
-        to_node = self.NDF.loc[node_index][to_mode2]
-        return to_node
 
     def setupNodeConversion(self):
 
@@ -2745,6 +3103,10 @@ class WORLD:
             self.factors = self.LOADED['OTHER']['factors']
             self.modes = self.LOADED['OTHER']['modes']
             self.bnds = self.LOADED['OTHER']['bnds'];
+
+
+        if 'max_num_people' in params: self.max_num_people = params['max_num_people']
+        else: self.max_num_people = None
 
 
         self.gtfs_feed_file = params['gtfs_feed_file'];
@@ -2999,7 +3361,7 @@ class WORLD:
             self.VEHS = VEHS
             self.SEG_TYPES = generate_segtypes('reg6') # reg1,reg2,bg
 
-            OUT = CONVERT_CSV_TO_PRE_FORMAT(self.GRAPHS,self.VEHS, self.SEG_TYPES, minz, maxz, self.csv_file_path)
+            OUT = CONVERT_CSV_TO_PRE_FORMAT(self.GRAPHS,self.VEHS, self.SEG_TYPES, minz, maxz, self.csv_file_path,max_num_people = self.max_num_people)
 
 
 
@@ -3218,13 +3580,11 @@ class WORLD:
     ###### LOADING BACKGROUND EDGE DATA ###### LOADING BACKGROUND EDGE DATA ###### LOADING BACKGROUND EDGE DATA 
     ###### LOADING BACKGROUND EDGE DATA ###### LOADING BACKGROUND EDGE DATA ###### LOADING BACKGROUND EDGE DATA 
 
-    def SIM(self,num_iters = 1,restart=True):
+    def SIM(self,num_iters = 1,restart=True,compute_uncongested = True, force_takeall=False):
 
 
         # self.add_base_edge_masses(self.GRAPHS,self.NETWORKS,WORLD0);
 
-        if restart:
-            self.initUNCONGESTED()
 
         mode = 'ondemand'
         # poly = np.array([-6120.8676711, 306.5130127])
@@ -3269,6 +3629,8 @@ class WORLD:
                 PERSON.UPDATE(self.NETWORKS,takeall=True)
 
 
+
+
         # nk = 2
         # GRADIENT DESCENT...
         for k in range(nk):
@@ -3296,7 +3658,9 @@ class WORLD:
             #world_of_transit_graph(WORLD,PEOPLE,GRAPHS,verbose=True);
 
 
-
+            takeall=False;
+            if force_takeall==True:
+                takeall=True;
             
 
             print('updating individual choices...')
@@ -3305,7 +3669,7 @@ class WORLD:
             for i,person in enumerate(self.PEOPLE):
                 PERSON = self.PEOPLE[person]
                 if np.mod(i,200)==0: print(person,'...')
-                PERSON.UPDATE(self.NETWORKS)
+                PERSON.UPDATE(self.NETWORKS,takeall=takeall)
                 # self.PEOPLE.UPDATE(PEOPLE, DELIVERY, NDF, GRAPHS,WORLD,takeall=False);
             # update_choices(PEOPLE, DELIVERY, NDF, GRAPHS,WORLD,takeall=False);
 
@@ -3316,6 +3680,912 @@ class WORLD:
             self.main['iter'] = self.main['iter'] + 1.;
             self.main['alpha'] = 10./(self.main['iter']+1.);
             # WORLD['main']['alpha'] = 10.;
+
+        if compute_uncongested:
+            self.initUNCONGESTED()
+
+    def makeDashboard(self):
+
+        self.DASH = DASHBOARD();
+        self.DASH.makeGrid();
+        self.DASH.addOutputs(self.OUTPUTS)
+
+
+    def generateLayers(self,use_all_trips=False):
+
+        params = {};
+        params['bgcolor'] = [1,1,1,1]
+
+
+        GRAPHS = self.GRAPHS;
+        ONDEMAND = self.ONDEMAND;
+        NETWORKS = self.NETWORKS;
+        NODES = self.NODES;
+        SIZES = self.SIZES;
+
+
+
+        print('starting to create plotting layers...')
+        start_time = time.time()
+        bgcolor = params['bgcolor'];
+
+        node_scale = 100.;    
+        lims = [0,1,0,1]
+
+        shows = {'drive': False,
+                 'walk': False,
+                 'transit':False,
+                 'ondemand':False,
+                 'direct':False,
+                 'shuttle':False,
+                 'ondemand_indiv':False,
+                 'lines':False,
+                 'gtfs':False,
+                 'source':False,
+                 'target':True,
+                 'legend':False,
+                 'base':False}
+
+
+        wids = {'drive': 4.,'walk':2,'transit':6,'lines':4,'gtfs':8,'ondemand':2,'direct':1,'ondemand_indiv':10,'base':3.};
+        maxwids = {'drive': 4.,'walk':2,'transit':6,'lines':4,'gtfs':8,'ondemand':2,'direct':1,'ondemand_indiv':10,'base':4.}
+        minwids = {'drive': 4.,'walk':2,'transit':6,'lines':4,'gtfs':8,'ondemand':2,'direct':1,'ondemand_indiv':10,'base':4.}
+        # mxpop1 = 1.
+        mxpops = {'drive': 0.3,'walk':0.01,'transit':0.001,'lines':0.00001,'gtfs':0.001,'ondemand':0.001}
+
+        # params['colors']['shuttle'] = [0.,0.,1.]
+        # params['set_alphas'] = {'direct':0.6,'shuttle':0.6}
+        # params['set_wids'] = {'direct':4,'shuttle':4}    
+
+
+        colors = {'drive':[1,0,0,1.],'walk':[1.,1.,0.,1.], #[0.7,0.7,0.7],
+                  'lines':[0.,0.,0.,1.],'transit':[1.,0.,1.,1.],'gtfs': [1.,0.5,0.,1.],   
+                  'ondemand':[0.,0.,1.,1.],'direct':[0.6,0.,1.,1.],'shuttle':[0.,0.,1.,1.],          
+                  'source':[0.,0.,1.,0.5],'target':[1.,0.,0.,0.5], #[0.8,0.8,0.8],
+                  'groups':[[0.,0.,1.,0.5],[0.7,0.,1.,0.5],[0.7,0.,1.,0.5],[0.7,0.,1.,0.5],[0.7,0.,1.,0.5],[0.7,0.,1.,0.5],[0.7,0.,1.,0.5],[0.7,0.,1.,0.5]],
+                  'shuttle_nodes':[1.,0.5,0.,0.5],
+                  'ondemand_indiv':[1.,0.,1.0,1.],
+                  'ondemand1':[0.,0.,1.0,1.],
+                  'ondemand2':[1.,0.,1.,1.],
+                  'ondemand_trips1':[0.,0.,0.,1.],
+                  'default_edge':[1,1,1,1]}
+
+        colors2 = {'drive_all':[1,0,0,0.3],'walk_all':[1,1.,0,1.],'gtfs_all':[1,0.5,0,0.2],'ondemand_all':[0.,0.,1.,0.5],
+                   'drive_trips':[0,0,0,1.],'walk_trips':[1.,1.,0,1.],'gtfs_trips':[1.,0.5,0.,1.],'ondemand_trips':[0.,0.,0.,1.0]}
+
+        colorB = np.array([0.,0.,1.])
+        colorA = np.array([0.6,0.,1.]); 
+        if len(list(ONDEMAND.groups))>0: groups = list(ONDEMAND.groups)
+        else: groups = ['group0']
+        colors2['groups'] = {};
+        if len(groups)<=1: ngrps = 1;
+        else: ngrps = len(groups)-1;
+        for i,group in enumerate(groups):
+            colorAB = (float(i)/ngrps)*colorA + (1.-(float(i)/ngrps))*colorB
+            colors2['groups'][group] = [colorAB[0],colorAB[1],colorAB[2],0.5];
+
+        sizes = {'source':100,'target':100,'shuttle':300,'direct':300,'gtfs':5}
+        node_rads = {'drive':100.,'walk':100.,'ondemand':100.,'gtfs':100.};
+        node_edgecolors = {'lines':[0,0,0,1],'source':[0,0,0,1],'target':[0,0,0],'shuttle':'k','direct':'k','gtfs':'k'};
+        # mxpop1 = 1.; #num_sources/10;
+        threshs = {'drive': [0,0,mxpops['drive'],1],'walk': [0,0,mxpops['walk'],1],
+                   'transit': [0,0,mxpops['transit'],1],'gtfs': [0,0,mxpops['gtfs'],1],'ondemand': [0,0,mxpops['ondemand'],1]}
+
+
+        #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP 
+        #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP 
+        #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP #### SETUP 
+
+        tags = ['base','lines','source','target','drive','walk','ondemand','gtfs'];
+
+
+
+        # def edgesFromPath(path):
+        # """ computes edges in a path from a list of nodes """
+        # edges = []; # initializing list
+        # for i,node in enumerate(path): # loops through nodes in path
+        #     if i<len(path)-1: # if not the last node
+        #         node1 = path[i]; node2 = path[i+1]; 
+        #     edges.append((node1,node2)) # add an edge tag defined as (node1,node2) which is the standard networkx structure
+        # return edges
+
+
+        ONDEMAND_EDGES = {};
+        ONDEMAND_RUNS = {};
+        # DELIVERY_TAGS = {};
+        ondemand_run_tags = [];
+        ondemand_group_tags = [];
+        # try: 
+        for _,group in enumerate(ONDEMAND.groups):
+            GROUP = ONDEMAND.groups[group]
+            tags.append(group);
+            ondemand_group_tags.append(group)
+
+            payload = GROUP.current_payload;
+            manifest = GROUP.current_manifest;
+            PDF = GROUP.payloadDF(payload,GRAPHS,include_drive_nodes = True);
+            MDF = GROUP.manifestDF(manifest,PDF)
+            ZZ = MDF[MDF['run_id']==1]
+            zz = list(ZZ.sort_values(['scheduled_time'])['drive_node'])
+            PLANS = GROUP.routesFromManifest(); #MDF,GRAPHS)
+            # PATHS = routeFromStops(zz,GRAPHS['drive'])
+            ONDEMAND_EDGES[group] = [PLANS[plan]['edges'] for _,plan in enumerate(PLANS)]
+            # DELIVERY_TAGS[group] = []
+            ONDEMAND_RUNS[group] = {};
+            for _,plan in enumerate(PLANS):
+                PLAN = PLANS[plan]
+                ONDEMAND_RUNS[group][plan] = PLAN['edges']
+                runtag = group + '_run' + str(plan);
+                ondemand_run_tags.append(runtag)
+            # for i,plan in enumerate(PLANS):
+            #     tags.append(group+'_delivery'+str(i))
+
+        # except:
+        #     pass
+
+
+        ONDEMAND_TRIPS = {};
+        ondemand_trip_tags = [];
+
+        # try: 
+        for _,group in enumerate(ONDEMAND.groups):
+            tags.append(group);
+            GROUP = ONDEMAND.groups[group]
+            payload = GROUP.current_payload;
+            manifest = GROUP.current_manifest;
+            PDF = GROUP.payloadDF(payload,GRAPHS,include_drive_nodes = True);
+            MDF = GROUP.manifestDF(manifest,PDF)
+            PLANS = GROUP.singleRoutesFromManifest(); # MDF,GRAPHS)
+            # PATHS = routeFromStops(zz,GRAPHS['drive'])
+            # ONDEMAND_RUNS[group] = {};
+            for runid in PLANS:
+                PLAN = PLANS[runid];
+                for trip in PLAN:
+                    TRIP = PLAN[trip];
+                    node1 = trip[0]; node2 = trip[1];
+                    # tag = 'ondemand'+'_'+group+'_'+'run'+str(runid)+'_'+str(node1)+'_'+str(node2);
+                    # ONDEMAND_TRIPS[tag] = TRIP['edges'];
+                    # ondemand_trip_tags.append(tag);
+                    # tags.append(tag)
+
+                    # tag = 'ondemand'+'_'+group+'_'+str(node1)+'_'+str(node2);
+                    tag = 'ondemand'+'_'+str(node1)+'_'+str(node2);
+                    ONDEMAND_TRIPS[tag] = TRIP['edges'];
+                    ondemand_trip_tags.append(tag);
+        # except:
+        #     pass        
+
+        # print(ondemand_run_tags)
+
+        ACTIVE_TRIPS = {}
+        for mode in ['drive','walk','gtfs','ondemand']:
+            NETWORK = NETWORKS[mode];
+            if use_all_trips: active_trips = list(NETWORK.segs)
+            else: active_trips = NETWORK.active_segs;
+            ACTIVE_TRIPS[mode] = active_trips.copy();
+
+
+        # print(ACTIVE_TRIPS)
+        walk_trip_tags = []; drive_trip_tags = []; gtfs_trip_tags = [];
+        TRIP_EDGES = {};
+        for mode in ['drive','walk','gtfs']:
+            NETWORK = NETWORKS[mode];
+            # print(mode)
+            TRIP_EDGES[mode] = {}
+            active_trips = ACTIVE_TRIPS[mode]
+            for trip in active_trips:
+                tag = mode + '_' + str(int(trip[0])) + '_' + str(int(trip[1]))
+                if trip in NETWORK.segs:
+                    SEG = NETWORK.segs[trip]
+                    # print(SEG.current_path)
+                    if not(SEG.current_path == None):
+                        edges = self.edgesFromPath(SEG.current_path)
+                        TRIP_EDGES[mode][tag] = edges;
+                        tags.append(tag);
+                        if mode == 'walk': walk_trip_tags.append(tag);
+                        if mode == 'drive': drive_trip_tags.append(tag);
+                        if mode == 'gtfs': gtfs_trip_tags.append(tag);
+
+
+
+        all_tags = tags + ondemand_trip_tags + ondemand_run_tags;
+
+        nodes = {tag:[] for i,tag in enumerate(all_tags)}
+        edges = {tag:[] for i,tag in enumerate(all_tags)}
+        node_colors = {tag:[] for i,tag in enumerate(all_tags)}
+        edge_colors = {tag:[] for i,tag in enumerate(all_tags)}
+        node_sizes = {tag:[] for i,tag in enumerate(all_tags)}
+        edge_widths = {tag:[] for i,tag in enumerate(all_tags)}
+        node_edge_colors = {tag:[] for i,tag in enumerate(all_tags)};
+
+
+        #### BASE LAYERS #####
+        basic_layer = {'graph':'all','bgcolor':[0.8,0.8,0.9,0.7],
+                      'node_colors':[1,1,1,1],'node_sizes':10,'node_edge_colors':[0,0,0,1],
+                      'edge_colors':[1,1,1,1],'edge_widths':10}
+
+        #### ACTIVE TRIPS 
+        start_nodes = {'drive':[],'walk':[],'ondemand':[],'gtfs':[]}
+        end_nodes = {'drive':[],'walk':[],'ondemand':[],'gtfs':[]}
+
+        for m,mode in enumerate(start_nodes):
+            for i,trip in enumerate(ACTIVE_TRIPS[mode]):
+                start_nodes[mode].append(trip[0])
+                end_nodes[mode].append(trip[1]) 
+
+        FGRAPH = GRAPHS['all']
+
+
+        # for i,name in enumerate(['drive','walk','ondemand','gtfs']):
+        #     nodes[name] = start_nodes[name]+end_nodes[name];
+
+
+        
+        # # for i,tag in enumerate(['lines','walk','ondemand','gtfs','sources','targets']):
+        # for i,tag in enumerate(['lines','source','target','drive','walk','ondemand','gtfs']):
+        #     nodes[tag] = list(FGRAPH.nodes)
+        #     edges[tag] = list(FGRAPH.edges)
+        #     nn = len(nodes[tag])
+        #     ne = len(edges[tag])
+        #     node_colors[tag] = np.outer(np.ones(nn),np.array([1,1,1,1]))
+        #     edge_colors[tag] = np.outer(np.ones(ne),np.array([1,1,1,1]))
+        #     node_edge_colors[tag] = np.outer(np.ones(ne),np.array([1,1,1,1]))
+        #     node_sizes[tag] = 10.*np.ones(nn);
+        #     edge_widths[tag] = 10.*np.ones(ne);
+
+        #### PRESETS #### PRESETS #### PRESETS #### PRESETS #### PRESETS 
+        #### PRESETS #### PRESETS #### PRESETS #### PRESETS #### PRESETS 
+        preset_tags = []
+        for i,tag in enumerate(preset_tags):
+            nodes[tag] = list(FGRAPH.nodes)
+            nn = len(nodes[tag])
+            node_colors[tag] = np.outer(np.ones(nn),np.array([1,1,1,1]))
+            node_edge_colors[tag] = np.outer(np.ones(nn),np.array([1,1,1,1]))
+            node_sizes[tag] = 1.*np.ones(nn);
+            
+        preset_tags = []
+        for i,tag in enumerate(preset_tags):
+            edges[tag] = list(FGRAPH.edges)
+            ne = len(edges[tag])        
+            edge_colors[tag] = np.outer(np.ones(ne),np.array([1,1,1,1]))
+            edge_widths[tag] = 1.*np.ones(ne);
+
+
+
+
+
+        ################ ------ ################ ------ ################ ------ ################ ------ ################ ------ 
+        ################ ------ ################ ------ ################ ------ ################ ------ ################ ------ 
+        ################ ------ ################ ------ ################ ------ ################ ------ ################ ------ 
+        ################ ------ ################ ------ ################ ------ ################ ------ ################ ------ 
+
+        edge_color = [];
+        edge_width = [];
+        drive_edges = list(GRAPHS['drive'].edges())
+        ondemand_edges = list(GRAPHS['ondemand'].edges())
+        walk_edges = list(GRAPHS['walk'].edges())
+        transit_edges = list(GRAPHS['gtfs'].edges())
+
+        DRIVE = NETWORKS['drive'];
+        TRANSIT = NETWORKS['gtfs'];
+        ONDEMAND = NETWORKS['ondemand'];
+        WALK = NETWORKS['walk'];
+
+        if 'other' in params:
+            other_nodes = params['other']['nodes'];
+            other_sizes = params['other']['sizes'];
+            other_color = params['other']['color'];
+        else:
+            other_nodes = []
+            other_sizes = [];
+            other_color = [0,0,0,1];
+
+        
+        # #include_graphs = {'ondemand':False,'drive':False,'transit':False,'walk':True};
+        # plot_graphs = [];
+        # for _,mode in enumerate(include_graphs):
+        #     if include_graphs[mode]==True:
+        #         plot_graphs.append(GRAPHS[mode])
+        # full_graph = nx.compose_all(plot_graphs);
+
+        ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES 
+        ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES 
+        ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES 
+        ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES ###### ADDING NODES 
+
+
+        for i,node in enumerate(FGRAPH.nodes):
+
+            if node in NODES['orig']:
+                tag = 'source'
+                nodes[tag].append(node)
+                node_sizes[tag].append(SIZES['home_sizes'][node]*node_scale)
+                node_colors[tag].append(colors[tag])
+                node_edge_colors[tag].append(node_edgecolors[tag])
+
+            if node in NODES['dest']:
+                tag = 'target'
+                nodes[tag].append(node)
+                node_sizes[tag].append(SIZES['work_sizes'][node]*node_scale)
+                node_colors[tag].append(colors[tag])
+                node_edge_colors[tag].append(node_edgecolors[tag])
+
+            for m,mode in enumerate(start_nodes):
+                if node in start_nodes[mode]:
+                    tag = mode;
+                    nodes[tag].append(node)
+                    node_sizes[tag].append(node_rads[tag])
+                    node_colors[tag].append(colors[tag])
+                    node_edge_colors[tag].append([0,0,0,1])
+
+
+            for m,mode in enumerate(end_nodes):
+                if node in end_nodes[mode]:
+                    tag = mode;
+                    nodes[tag].append(node)
+                    node_sizes[tag].append(node_rads[tag])
+                    node_colors[tag].append(colors[tag])
+                    node_edge_colors[tag].append([0,0,0,1])
+
+
+            if node in GRAPHS['gtfs'].nodes:
+                tag = 'lines'
+                nodes[tag].append(node)
+                node_sizes[tag].append(1);#SIZES['work_sizes'][node]*node_scale)
+                node_colors[tag].append(colors[tag])
+                node_edge_colors[tag].append(node_edgecolors[tag])
+
+                        
+        #         if shows['drive'] or shows['ondemand'] or shows['ondemand_indiv'] or shows['shuttle'] or shows['direct']:
+        #             tag = (edge[0],edge[1],0)
+        #             edge_mass = WORLD['drive']['current_edge_masses'][tag]
+        #             ondemand_mass = WORLD['ondemand']['current_edge_masses'][tag]
+        #             ondemand_mass1 = WORLD['ondemand']['current_edge_masses1'][tag]            
+        #             ondemand_mass2 = WORLD['ondemand']['current_edge_masses2'][tag]
+
+
+        # ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE 
+        # ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE 
+        # ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE 
+        # ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE 
+        # ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE 
+        # ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE 
+        # ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE 
+        # ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE ###### EDGE 
+        
+        drive_edges = list(GRAPHS['drive'].edges)
+        walk_edges = list(GRAPHS['walk'].edges)
+        ondemand_edges = list(GRAPHS['ondemand'].edges)
+        transit_edges = list(GRAPHS['gtfs'].edges)
+
+        transit_edges2 = [];
+        for i,edge in enumerate(transit_edges):
+            transit_edges2.append((edge[0],edge[1],));
+
+
+        for k,edgex in enumerate(FGRAPH.edges):        
+            edge = (edgex[0],edgex[1]);
+            edge2 = (edgex[0],edgex[1],0);
+
+            if edge2 in transit_edges:
+                tag = 'lines'
+                edges[tag].append(edge2)
+                edge_colors[tag].append(colors[tag])
+                edge_widths[tag].append(wids[tag]); #SIZES['work_sizes'][node]*node_scale)
+
+            if edge2 in drive_edges:
+                tag = 'drive'            
+                # drive_mass = WORLD['drive']['current_edge_masses'][edge]
+                drive_mass = NETWORKS['drive'].base_edge_masses[edge2]
+                if drive_mass > 0: 
+                    edges[tag].append(edge2)
+                    edge_colors[tag].append(colors[tag][:3]+[0.3*thresh(drive_mass,threshs[tag])])
+                    edge_widths[tag].append(maxwids[tag]*thresh(drive_mass,threshs[tag]))
+
+
+            if edge2 in walk_edges:
+                tag = 'walk'
+                walk_mass = NETWORKS[tag].current_edge_masses[edge2]
+                if walk_mass > 0: 
+                    edges[tag].append(edge2)
+                    edge_colors[tag].append(colors[tag][:3]+[thresh(walk_mass,threshs[tag])])
+                    edge_widths[tag].append(maxwids[tag]*thresh(walk_mass,threshs[tag]))
+
+
+            if edge in transit_edges2:
+                tag = 'gtfs'            
+                gtfs_mass = NETWORKS[tag].current_edge_masses[edge2]
+                if gtfs_mass > 0: 
+                    edges[tag].append(edge2)
+                    edge_colors[tag].append(colors[tag])
+                    edge_widths[tag].append(maxwids[tag]*thresh(gtfs_mass,threshs[tag]))
+
+            for gg,group in enumerate(ONDEMAND_EDGES):
+                edge_lists4 = ONDEMAND_EDGES[group];
+                for kk,edge_list in enumerate(edge_lists4):
+                    if edge in edge_list:
+                        tag = 'ondemand'
+                        edges[tag].append(edgex)
+                        edge_colors[tag].append(colors['groups'][gg])
+                        edge_widths[tag].append(4.)
+
+                        tag = group;
+                        edges[tag].append(edgex)
+                        # edge_colors[tag].append(colors['groups'][gg])
+                        edge_colors[tag].append(colors2['groups'][group])
+                        edge_widths[tag].append(4.)
+
+
+                        # tag = group + '_delivery' + str(kk);
+                        # edges[tag].append(edgex)
+                        # # edge_colors[tag].append(colors['groups'][gg][::3]+[1.])
+                        # edge_colors[tag].append(colors2['groups'][group][:3]+[1.])
+                        # edge_widths[tag].append(10.)
+
+
+            for _,trip in enumerate(ONDEMAND_TRIPS):
+                edge_list = ONDEMAND_TRIPS[trip];
+                # for kk,edge_list in enumerate(edge_lists4):
+                if edge in edge_list:
+                    tag = trip
+                    edges[tag].append(edgex)
+                    edge_colors[tag].append(colors['ondemand_trips1'])
+                    edge_widths[tag].append(10.)
+
+            for _,group in enumerate(ONDEMAND_RUNS):
+                RUNS = ONDEMAND_RUNS[group]
+                for _,runid in enumerate(RUNS):
+                    edge_list = RUNS[runid]
+                    # for kk,edge_list in enumerate(edge_lists4):
+                    if edge in edge_list:
+                        tag = group + '_run' + str(runid)
+                        edges[tag].append(edgex)
+                        edge_colors[tag].append(colors2['groups'][group])
+                        edge_widths[tag].append(10.)
+
+
+
+
+
+            for mode in TRIP_EDGES:
+                TRIPS = TRIP_EDGES[mode]
+                for trip_tag in TRIPS:
+                    edge_list = TRIPS[trip_tag];
+                # for kk,trip_tag in enumerate(TRIPS): #edge_list in enumerate(edge_lists4):
+                # edge_list = TRIPS[trip_tag]
+                    # if mode == 'gtfs':
+                    #     print(trip_tag)
+                    if edge in edge_list:
+                        edges[trip_tag].append(edgex)
+                        edge_colors[trip_tag].append(colors2[mode+'_trips'])
+                        edge_widths[trip_tag].append(10.)
+            
+        #     if walk_mass > 0:
+        #         tag = 'walk'
+        #         edges[tag].append(edge2)
+        #         edge_colors[tag].append(colors['walk']+[1])
+        #         edge_widths[tag].append(4); #SIZES['work_sizes'][node]*node_scale)
+
+
+        #     if edge in transit_edges:
+
+        #         if gtfs_mass > 0:
+        #             tag = 'gtfs'
+        #             edges[tag].append(edgex)
+        #             edge_colors[tag].append(colors['gtfs']+[1])
+        #             edge_widths[tag].append(maxwids['gtfs']*thresh(gtfs_mass,threshs['gtfs']))
+
+        #         tag = 'lines'
+        #         edges[tag].append(edgex)
+        #         edge_colors[tag].append(colors[tag]+[1]);
+        #         edge_widths[tag].append(maxwids[tag]);
+
+        #     # if len(OTHER_EDGES)>0:
+        #     #     for i,group in enumerate(OTHER_EDGES):
+        #     #         GROUP = OTHER_EDGES[group]
+        #     #         thresh_lims = GROUP['thresh']
+        #     #         color = GROUP['color']
+        #     #         maxwid = GROUP['maxwid']
+        #     #         maxalpha = GROUP['maxalpha']
+        #     #         edge2 = (edge[0],edge[1],0)
+        #     #         if edge2 in GROUP['edges']:
+        #     #             mmass = GROUP['edges'][edge2]    
+        #     #             if mmass > 0.:
+        #     #                 tag = 'gtfs'
+        #     #                 # edges[tag].append(edgex)
+        #     #                 # edge_colors[tag].append(colors['gtfs']+[1])
+        #     #                 # edge_widths[tag].append(maxwids['gtfs']*thresh(gtfs_mass,threshs['gtfs']))                        
+        #     #                 edge_color[-1] = color+[maxalpha*thresh(mmass,thresh_lims)]; #[chopoff(edge_mass,mx1,0,1)])
+        #     #                 edge_width[-1] = maxwids['base']*thresh(mmass,thresh_lims);
+                    
+
+        ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS 
+        ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS 
+        ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS 
+        ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS ##### CONSTRUCTING LAYERS 
+
+        # tags = ['line','source','target','drive','walk','ondemand','gtfs'];
+        layers = {};
+        for i,name in enumerate(all_tags):
+            if len(nodes[name]) > 0  or len(edges[name]) > 0:
+                layers[name] = {}
+                layers[name]['name'] = name;
+                layers[name]['bgcolor'] = [1,1,1,0];
+                layers[name]['nodes'] = nodes[name].copy();
+                layers[name]['edges'] = edges[name].copy();
+                layers[name]['node_colors'] = node_colors[name].copy();
+                layers[name]['edge_colors'] = edge_colors[name].copy();
+                layers[name]['node_sizes'] = node_sizes[name].copy();
+                layers[name]['edge_widths'] = edge_widths[name].copy();
+                layers[name]['node_edge_colors'] = node_edge_colors[name].copy();
+                layers[name] = {**basic_layer,**layers[name]}
+                if name in drive_trip_tags: layers[name]['subfolder'] = 'drive_trips/'
+                if name in walk_trip_tags: layers[name]['subfolder'] = 'walk_trips/'
+                if name in gtfs_trip_tags: layers[name]['subfolder'] = 'gtfs_trips/'
+                if name in ondemand_trip_tags: layers[name]['subfolder'] = 'ondemand_trips/'
+                if name in ondemand_group_tags: layers[name]['subfolder'] = 'groups/'
+                if name in ondemand_run_tags: layers[name]['subfolder'] = 'runs/'
+# if name in ondemand_trip_tags: layers[name]['subfolder'] = 'ondemand_trips/'
+                if 'subfolder' in layers[name]: layers[name]['subpath'] = layers[name]['subfolder'] + layers[name]['name'] + '.png' 
+                else: layers[name]['subpath'] = layers[name]['name'] + '.png' 
+
+        # for i,name in enumerate(ondemand_trip_tags):
+        #     if len(nodes[name]) > 0  or len(edges[name]) > 0:
+        #         layers[name] = {}
+        #         layers[name]['name'] = name;
+        #         layers[name]['bgcolor'] = [1,1,1,0];
+        #         layers[name]['nodes'] = nodes[name].copy();
+        #         layers[name]['edges'] = edges[name].copy();
+        #         layers[name]['node_colors'] = node_colors[name].copy();
+        #         layers[name]['edge_colors'] = edge_colors[name].copy();
+        #         layers[name]['node_sizes'] = node_sizes[name].copy();
+        #         layers[name]['edge_widths'] = edge_widths[name].copy();
+        #         layers[name]['node_edge_colors'] = node_edge_colors[name].copy();
+        #         layers[name] = {**basic_layer,**layers[name]}
+        #         layers[name]['subfolder'] = 'ondemand_trips/'
+        #         layers[name]['subpath'] = layers[name]['subfolder'] + layers[name]['name'] + '.png' 
+
+
+        # for i,name in enumerate(ondemand_run_tags):
+        #     if len(nodes[name]) > 0  or len(edges[name]) > 0:
+        #         layers[name] = {}
+        #         layers[name]['name'] = name;
+        #         layers[name]['bgcolor'] = [1,1,1,0];
+        #         layers[name]['nodes'] = nodes[name].copy();
+        #         layers[name]['edges'] = edges[name].copy();
+        #         layers[name]['node_colors'] = node_colors[name].copy();
+        #         layers[name]['edge_colors'] = edge_colors[name].copy();
+        #         layers[name]['node_sizes'] = node_sizes[name].copy();
+        #         layers[name]['edge_widths'] = edge_widths[name].copy();
+        #         layers[name]['node_edge_colors'] = node_edge_colors[name].copy();
+        #         layers[name] = {**basic_layer,**layers[name]}
+        #         layers[name]['subfolder'] = 'runs/'
+        #         layers[name]['subpath'] = layers[name]['subfolder'] + layers[name]['name'] + '.png' 
+
+
+
+
+        tag = 'base'
+        layers[tag] = {};
+        layers[tag]['name'] = tag
+        layers[tag]['graph'] = 'all';
+        layers[tag]['bgcolor'] = list(np.array([0.7,0.7,0.8,0.9]));
+        layers[tag]['nodes'] = list(FGRAPH.nodes)
+        layers[tag]['edges'] = list(FGRAPH.edges)
+        nn = len(list(FGRAPH.nodes))
+        ne = len(list(FGRAPH.edges))
+        layers[tag]['node_colors'] = np.outer(np.ones(ne),np.array([1,1,1,1]))
+        layers[tag]['node_sizes'] = 0.5*np.ones(nn)
+        layers[tag]['node_edge_colors'] = np.outer(np.ones(ne),np.array([1,1,1,1]))
+        layers[tag]['edge_colors'] = np.outer(np.ones(ne),np.array([1,1,1,1]))
+        layers[tag]['edge_widths'] = wids[tag]*np.ones(ne)
+        layers[tag] = {**basic_layer,**layers[tag]}
+        layers[tag]['subpath'] = layers[tag]['name'] + '.png' 
+
+
+        tag = 'drive'
+        layers[tag]['name'] = tag;
+        layers[tag]['node_sizes'] = 0.;
+        layers[tag]['node_colors'] = [0,0,0,0];
+        layers[tag]['node_edge_colors'] = [0,0,0,0];
+        layers[tag]['subpath'] = layers[tag]['name'] + '.png' 
+
+
+
+        end_time = time.time()
+        print('time to create layers:',end_time-start_time)
+
+
+        # LAYERS = generateLayers(GRAPHS,NODES,SIZES,DELIVERY,WORLD,params,use_all_trips=True);
+        # # tag = 'base'
+        # # plotLayer(GRAPHS,layers[tag])
+        # folder = 'figs/interact/layers/'
+        # tags = ['drive_trips/','walk_trips/','gtfs_trips/','ondemand_trips/']
+        # for tag in tags:
+        #     path = folder + tag
+        #     if not os.path.exists(path):
+        #         os.mkdir(path)
+
+        # path = folder + 'groups/';
+        # if not os.path.exists(path): os.mkdir(path)
+
+        # path = folder + 'runs/';
+        # if not os.path.exists(path): os.mkdir(path)
+        # plotLAYERS(GRAPHS,folder,LAYERS);
+        self.layers = layers
+        # return layers
+
+    def plotLAYERS(self,folder='DASH/dash',overwrite=False,verbose=True):
+        print('starting layers...')
+        GRAPHS = self.GRAPHS
+        layers = self.layers;
+        self.dash_folder = folder; #'DASH/'+folder
+
+
+        write_layers = overwrite;
+        if not(os.path.isdir(self.dash_folder)):
+            os.mkdir(self.dash_folder)
+            write_layers = True;
+        # if not(os.path.isdir(self.dash_folder+'/groups')):
+        #     os.mkdir(self.dash_folder+'/groups')
+        if not(os.path.isdir(self.dash_folder+'/runs')):
+            os.mkdir(self.dash_folder+'/runs')
+        if not(os.path.isdir(self.dash_folder+'/groups')):
+            os.mkdir(self.dash_folder+'/groups')
+
+
+        if not(os.path.isdir(self.dash_folder+'/walk_trips')):
+            os.mkdir(self.dash_folder+'/walk_trips');
+        if not(os.path.isdir(self.dash_folder+'/ondemand_trips')):
+            os.mkdir(self.dash_folder+'/ondemand_trips');
+        if not(os.path.isdir(self.dash_folder+'/drive_trips')):
+            os.mkdir(self.dash_folder+'/drive_trips');
+        if not(os.path.isdir(self.dash_folder+'/gtfs_trips')):
+            os.mkdir(self.dash_folder+'/gtfs_trips');
+
+
+        # os.mkdir(self.dash_folder+'/drive_trips')
+        # os.mkdir(self.dash_folder+'/walk_trips')
+        # os.mkdir(self.dash_folder+'/ondemand_trips')                
+
+        if write_layers: 
+            for i,layer in enumerate(layers):
+                if np.mod(i,20)==0: print('PLOTTING LAYER',i,'...');
+                if verbose:  print('drawing layer: ',layer)
+                LAYER = layers[layer]
+                self.plotLayer(LAYER); #folder=self.dash_folder);
+        print('finished.')
+
+
+    def plotLayer(self,data): #,folder=''):
+        GRAPHS = self.GRAPHS
+        GRAPH = GRAPHS[data['graph']];
+        folder = self.dash_folder + '/'
+
+        if 'nodes' in data: nodes = data['nodes'];
+        else: nodes = [];
+        if 'edges' in data: edges = data['edges'];
+        else: edges = []
+
+
+        SUBGRAPH_NODES = GRAPH.subgraph(nodes);
+        SUBGRAPH_EDGES = GRAPH.edge_subgraph(edges);
+        SUBGRAPH = nx.compose(SUBGRAPH_NODES,SUBGRAPH_EDGES)
+
+        nn = len(nodes);
+        ne = len(edges);
+
+        if 'node_colors' in data: node_colors = data['node_colors'];
+        else: node_colors = np.outer(np.ones(nn),np.array([1,1,1,1]));
+        if 'edge_colors' in data: edge_colors = data['edge_colors'];
+        else: edge_colors = np.outer(np.ones(ne),np.array([1,1,1,1]));
+
+        if 'node_sizes' in data: node_sizes = data['node_sizes'];
+        else: node_sizes = 10.0*np.ones(nn);
+        if 'edge_widths' in data: edge_widths = data['edge_widths'];
+        else: edge_widths = 1.0*np.ones(ne);
+
+        if 'node_edge_colors' in data: node_edge_colors = data['node_edge_colors'];
+        else: node_edge_colors = np.outer(np.ones(nn),np.array([1,1,1,1]));
+
+        if 'subfolder' in data: fileName = folder + data['subfolder'] + data['name']+'.png';
+        else: fileName = folder +  data['name']+'.png';
+
+
+        bgcolor = data['bgcolor']
+        if 'bgcolor' in data: bgcolor = data['bgcolor'];
+        else: bgcolor = [0.8,0.8,0.9,0.9]
+
+        if 'lims' in data: lims = data['lims'];
+        #else:
+
+
+        lims = [-85.340921162, -85.246387138, 34.98229815, 35.06743515]
+
+
+        NODE_COLORS = node_colors;
+        NODE_SIZES = node_sizes;
+        EDGE_COLORS = edge_colors;
+        EDGE_WIDTHS = edge_widths;
+        NODE_EDGECOLORS = node_edge_colors;
+
+        
+
+        NODE_COLORS = [];
+        NODE_SIZES = [];
+        EDGE_COLORS = [];
+        EDGE_WIDTHS = [];
+        NODE_EDGECOLORS = [];
+
+        # # scale = 1;
+        node_ind = 0;
+        for k,node in enumerate(SUBGRAPH.nodes):
+            NODE_COLORS.append([1,1,1,1]);
+            NODE_SIZES.append(1);
+            NODE_EDGECOLORS.append([1,1,1,1]);
+            if node in nodes:
+                NODE_COLORS[-1] = node_colors[node_ind];
+                NODE_SIZES[-1] = node_sizes[node_ind];
+                NODE_EDGECOLORS[-1] = node_edge_colors[node_ind];
+                node_ind = node_ind + 1;
+
+
+        #     # for j,lst in enumerate(nodes):
+        #     #     if node in lst:
+        #     #         NODE_COLORS[-1] = node_colors[j];
+        #     #         NODE_SIZES[-1] = node_sizes[j];
+        edge_ind = 0;
+        for k,edge in enumerate(SUBGRAPH.edges):
+
+            # print(edge)
+            # print(edges)
+
+            EDGE_COLORS.append([0,0,0,1]);
+            EDGE_WIDTHS.append(0.2);
+            if edge in edges:
+                EDGE_COLORS[-1] = edge_colors[edge_ind]
+                EDGE_WIDTHS[-1] = edge_widths[edge_ind]
+
+            # if edge in edges:
+        #     # tag = (edge[0],edge[1])
+        #     # for j,lst in enumerate(edges):
+        #     #     if tag in lst:
+        
+
+        # NODE_COLORS = [1,1,1,1]
+        # NODE_SIZES = 10;
+        # EDGE_COLORS = [1,1,1,1]
+        # EDGE_WIDTHS = 2;
+        # if data['name'] == 'walk':
+        #     print(NODE_SIZES[:10])
+
+        if len(SUBGRAPH.nodes())>0 or len(SUBGRAPH.edges)>0:
+            fig, ax = ox.plot_graph(SUBGRAPH,bgcolor=bgcolor,  
+                                    node_color=NODE_COLORS,
+                                    node_size = NODE_SIZES,
+                                    edge_color=EDGE_COLORS,
+                                    edge_linewidth=EDGE_WIDTHS,
+                                    node_edgecolor = NODE_EDGECOLORS,
+                                    figsize=(20,20),
+                                    show=False,); #file_format='svg')        
+            ax.set_xlim([lims[0],lims[1]])
+            ax.set_ylim([lims[2],lims[3]])
+            plt.savefig(fileName,bbox_inches='tight',pad_inches = 0,transparent=False)
+            plt.close()    
+
+        else:
+            fig,ax = plt.subplots(1,1)
+            ax.set_xlim([lims[0],lims[1]])
+            ax.set_ylim([lims[2],lims[3]])
+            plt.savefig(fileName,bbox_inches='tight',pad_inches = 0,transparent=False)
+            plt.close()    
+
+
+
+
+# class TRACE:
+#     def __init__(self,params = {}):
+#         self.image = None;
+#         self.name = None
+#         self.x = None
+#         self.y = None
+#         self.sliders = {};#'':{},
+#         self.loc = None;
+#         self.dataind = None
+#         if 'name' in params: self.name = params['name'];
+#         if 'image' in params: self.image = params['image'];
+#         if 'x' in params: self.x = params['x'];
+#         if 'y' in params: self.y = params['y'];
+#         if 'loc' in params: self.loc = params['loc']
+#         if 'dataind' in params: self.dataind = params['dataind'];
+#         if 'sliders' in params: self.sliders = params['sliders'];
+
+#     def show(self,fig):
+#         fig.add_trace(go.Bar(x=self.x,y=self.y),row=loc[0],col=loc[1]);
+#         #     fig.add_trace(go.Bar(x=counts2,y=costs2,width=0.5,base ='overlay',marker = {'color' :color,'opacity':0.5}),inds2[0],inds2[1])
+
+
+
+
+
+    def generate_graph_presets(self): #lims = [],other_edges = False):    
+
+        lims = [];
+        other_edges = False;
+        fileName = 'current.pdf'
+
+        shows = {'drive': True,
+                 'walk':False,
+                 'transit':False,
+                 'ondemand': False,
+                 'direct':False,
+                 'shuttle':False,
+                 'ondemand_indiv':False,
+                 'lines':True,
+                 'gtfs':False,
+                 'source':False,
+                 'target':False,
+                 'legend':True,
+                 'base':True}
+        maxwids = {'drive': 10.,'walk':6,'transit':10,'lines':4,'gtfs':10,'ondemand':2,'direct':1,
+                    'ondemand_indiv':10,'base':4.}
+
+        colors = {'shuttle':[1,0.5,0.5]}
+
+        # mxpop1 = 1.
+        mxpops = {'drive': 1.,'walk':1,'transit':1,'lines':1,'gtfs':1,'ondemand':1}
+
+        # params = generate_graph_presets(fileName,shows,WORLD,maxwids,mxpops,other_edges = True)
+        # params['SIZES'] = SIZES;
+        # params['colors']['shuttle'] = [0.,0.,1.]
+        # params['set_alphas'] = {'direct':0.6,'shuttle':0.6}
+        # params['set_wids'] = {'direct':4,'shuttle':4}
+                                 
+        # start_time = time.time()
+        cmap = plt.get_cmap('autumn')
+    # plot_multimode(GRAPHS,NODES,DELIVERY,WORLD,params);
+
+
+        include_graphs = {'ondemand':False,'drive':True,'transit':True,'walk':shows['walk']};
+        colors = {'drive':[1,0,0],'walk':[1.,1.,0.],#[0.7,0.7,0.7],
+                  'lines':[0.,0.,0.],'transit':[1.,0.,1.],'gtfs': [1.,0.5,0.],   
+                  'ondemand':[0.,0.,1.],'direct':[0.6,0.,1.],'shuttle':[0.,0.,1.],          
+                  'source':[0.,0.,1.,0.5],'target':[1.,0.,0.,0.5], #[0.8,0.8,0.8],
+                  'shuttle_nodes':[1.,0.5,0.,0.5],
+                  'ondemand_indiv':[1.,0.,1.0],
+                  'ondemand1':[0.,0.,1.0],'ondemand2':[1.,0.,1.],
+                  'default_edge':[1,1,1,1]}
+        #colors = {**colors, **colors0}
+
+        sizes = {'source':100,'target':100,'shuttle':300,'direct':300,'gtfs':5}
+        node_edgecolors = {'source':[0,0,0],'target':[0,0,0],'shuttle':'k','direct':'k','gtfs':'k'};
+
+        # mxpop1 = 1.; #num_sources/10;
+        threshs = {'drive': [0,0,mxpops['drive'],1],'walk': [0,0,mxpops['walk'],1],
+                   'transit': [0,0,mxpops['transit'],1],'gtfs': [0,0,mxpops['gtfs'],1],'ondemand': [0,0,mxpops['ondemand'],1]}
+
+        params = {}
+        #params['other'] = {}; 
+        #params['other'] = {'nodes':other_nodes,'sizes':other_sizes,'color':other_color}
+        params['shows'] = shows; params['colors'] = colors;
+        params['sizes'] = sizes; params['node_edgecolors'] = node_edgecolors;
+        params['maxwids'] = maxwids; params['threshs'] = threshs; params['mxpops'] = mxpops;
+        params['filename'] = fileName; params['include_graphs'] = include_graphs
+        # bgcolor = list(0.8*np.array([0.9,0.9,1])) + [0]
+        params['lims'] = lims
+        params['bgcolor'] = bgcolor;
+        params['node_scale'] = 100.5;
+
+
+
+        # if other_edges == True: 
+        #     params['other_edges'] = {'grp1':{'edges':WORLD['drive']['base_edge_masses'],
+        #                                      'thresh': threshs['drive'],
+        #                                      'maxwid':maxwids['drive'],
+        #                                      'color':[0.9,0.1,0.1],
+        #                                      'maxalpha':0.3}}; #colors['drive']}}
+        return params        
+
 
 
 
@@ -3434,8 +4704,6 @@ class WORLD:
 #     WORLD['main']['alpha'] = 10./(WORLD['main']['iter']+1.);
 #     # WORLD['main']['alpha'] = 10.;
 
-    def saveOutputs(self,filename):
-
         # count = 0;
         # file_created=False;
 
@@ -3457,6 +4725,10 @@ class WORLD:
         #     else:
         #         free_slot_found = True;
         #         output_path = possible_path;
+
+    def saveOutputs(self,filename):
+
+
         output_path = filename;
         os.mkdir(output_path)
         for mode in self.modes:
@@ -3464,16 +4736,46 @@ class WORLD:
         self.OUTPUTS['ondemand'].to_parquet(output_path+'/ondemand_driver_runs'+'.parquet')
 
 
+    def printOutputs(self,dfs_to_show=['drive','walk','ondemand','gtfs','groups'],row_count =5, show_active=False):
+        
+
+        DFS = {}
+        for mode in self.modes:
+            DF = self.OUTPUTS['by_mode'][mode]
+            if show_active: DF = DF[DF['active']==True]
+            print(mode, 'statistics ... printing dataframe of lenght', len(DF))
+            DFS[mode] = DF.copy()
+
+        if 'groups' in dfs_to_show:
+            DF = self.OUTPUTS['ondemand']
+            # if show_active: DF = DF[DF['active']==True]
+            print('ONDEMAND Statistics...printing dataframe of length',len(DF))
+            print(DF.head(row_count)); 
+            print(''); print(''); print('');
+
+        for mode in self.modes:
+            if mode in dfs_to_show:
+                DF = DFS[mode]
+                print(DF.head(row_count))
+                print(''); print(''); print('')
+        
 
 
-    def generateOutputs(self):
 
+    def generateOutputs(self,randomize=[]):
+
+
+        maxvalues = {'distance':10000000,'travel_time':100000,'money':10000000,'switches':10000000}
+        maxvalues_bymode = {'drive':{'distance':10000000,'travel_time':100000,'money':10000000,'switches':10000000},
+                            'walk':{'distance':10000000,'travel_time':100000,'money':10000000,'switches':10000000},
+                            'ondemand':{'distance':10000000,'travel_time':100000,'money':10000000,'switches':10000000},
+                            'gtfs':{'distance':10000000,'travel_time':100000,'money':10000000,'switches':10000000}}
         ##### INITIALIZING 
         self.OUTPUTS = {};
         self.OUTPUTS['by_mode'] = {};
         for _,mode in enumerate(self.modes):
             colheads = []
-            colheads = colheads + ['seg_id','mode','trip_ids']
+            colheads = colheads + ['seg_id','mode','trip_ids','active']
             colheads = colheads + ['start_node','end_node','start_loc','end_loc'];
             colheads = colheads + ['people'];
             colheads = colheads + ['distance','travel_time','money','switches']
@@ -3496,9 +4798,11 @@ class WORLD:
             all_segs = list(NETWORK.segs);
             SEGS = NETWORK.segs
 
-
             for seg in SEGS:
+
                 SEG = SEGS[seg];
+
+
 
                 DATA = {};
                 DATA['seg_id'] = [SEG.seg_id];
@@ -3524,7 +4828,7 @@ class WORLD:
                 # if 'current_dist' in SEG.costs:
                 DATA['distance'] = [SEG.costs['current_dist']]
                 # if 'current_conven' in SEG.costs:
-                DATA['current_conven'] = [SEG.costs['current_conven']]    
+                # DATA['current_conven'] = [SEG.costs['current_conven']]    
                 DATA['travel_time'] = [SEG.costs['current_time']]
                 DATA['money'] = [SEG.costs['current_money']]
                 DATA['switches'] = [SEG.costs['current_switches']]
@@ -3573,6 +4877,18 @@ class WORLD:
                     DATA['dropoff_time_start'] = [SEG.dropoff_time_window_start];
                     DATA['dropoff_time_end'] = [SEG.dropoff_time_window_end];
                 self.OUTPUTS['by_mode'][mode] = pd.concat([self.OUTPUTS['by_mode'][mode],pd.DataFrame(DATA)],ignore_index=True);
+
+                for factor in maxvalues:
+                    maxvalue = maxvalues_bymode[mode][factor];
+                    mask = self.OUTPUTS['by_mode'][mode][factor] > maxvalue;
+                    self.OUTPUTS['by_mode'][mode][mask] = 0;
+
+
+            for factor in randomize:
+                length = len(self.OUTPUTS['by_mode'][mode]);
+                self.OUTPUTS['by_mode'][mode][factor] = np.random.rand(length)
+
+
             
         ###########################################################################################
         ###########################################################################################
@@ -5165,7 +6481,7 @@ class WORLD:
     ########## ====================== GRAPH BASIC =================== ###################
     ########## ====================== GRAPH BASIC =================== ###################
 
-    def nodesFromTrips(trips): ### ADDED TO CLASS
+    def nodesFromTrips(self,trips): ### ADDED TO CLASS
         nodes = [];
         for i,trip in enumerate(trips):
             node0 = trip[0]; node1 = trip[1];
@@ -5175,7 +6491,7 @@ class WORLD:
                 nodes.append(node1);
         return nodes
 
-    def edgesFromPath(path): ### ADDED TO CLASS
+    def edgesFromPath(self,path): ### ADDED TO CLASS
         """ computes edges in a path from a list of nodes """
         edges = []; # initializing list
         for i,node in enumerate(path): # loops through nodes in path
@@ -5184,7 +6500,7 @@ class WORLD:
                 edges.append((node1,node2)) # add an edge tag defined as (node1,node2) which is the standard networkx structure
         return edges
 
-    def locsFromNodes(nodes,GRAPH): ### ADDED TO CLASS
+    def locsFromNodes(self,nodes,GRAPH): ### ADDED TO CLASS
         """ returns a list of locations from a list of nodes in a graph"""
         out = []
         for i,node in enumerate(nodes):
@@ -5592,7 +6908,13 @@ class ONDEMAND:
 
 
     def plotCongestionModels(self,ax):  ## NOT FIXED YET....
-        for _,group in enumerate(self.groups):
+
+        self.groupFitColors = [];
+        for i,group in enumerate(self.groups):
+
+            frac = i/len(self.groups);
+            self.groupFitColors.append([1-frac,0,frac,0.5*frac+0.5]);
+            GROUP = self.groups[group]
             counts = self.groups[group].fit['counts']
             pts = self.groups[group].fit['pts']
             shp = np.shape(pts);
@@ -5600,9 +6922,8 @@ class ONDEMAND:
             coeffs = self.groups[group].fit['poly']
             Yh = self.groups[group].fit['Yh'];
             for j in range(np.shape(pts)[1]):
-                ax.plot(counts,pts[:,j],'o',color='blue')
-            ax.plot(xx,Yh,'--',color='red')        
-
+                ax.plot(counts,pts[:,j],'o',color=self.groupFitColors[i])
+            ax.plot(xx,Yh,'--',color=self.groupFitColors[i])
 
 
         # else: 
@@ -5800,6 +7121,11 @@ class GROUP:
 
         self.driversDF = driversDF
 
+        self.PDF = [];
+        self.MDF = [];
+        self.current_PDF = [];
+        self.current_MDF = [];
+
         # for k in range(self.num_groups):
         #     ROW = self.grpsDF.iloc[k];
         #     group = ROW['group']
@@ -5886,7 +7212,7 @@ class GROUP:
 
             ptsx = {};
             for i,count in enumerate(counts):
-                print('...computing averages for',count,'active ondemand trips in group',self.group_ind,'...')
+                print('...computing averages for',count,'active ondemand trips in',self.group,'...'); #' group',self.group_ind,'...')
                 for j in range(num_per_count):
                     current_average = np.mean(pts[i,:j])
                     # try: 
@@ -5909,9 +7235,15 @@ class GROUP:
 
                     manifests = optimizer.offline_solver(payload) 
 
-                    PDF = self.payloadDF(payload,self.GRAPHS)
+                    PDF = self.payloadDF(payload,self.GRAPHS,include_drive_nodes = True);
                     MDF = self.manifestDF(manifests,PDF)
+                    self.PDF = PDF;
+                    self.MDF = MDF;
+                    self.current_PDF = PDF;
+                    self.current_MDF = MDF;
                     average_time,times_to_average = self.assignCostsFromManifest(trips_to_plan,NETWORK.segs,nodes,MDF,NETWORK,0)
+
+
                     pts[i,j] = average_time
                     # except:
                     #     pts[i,j] = current_average
@@ -6131,18 +7463,18 @@ class GROUP:
         return MDF
 
 
-    def routeFromStops(self): #nodes,GRAPH): ### ADDED TO CLASS        
+    def routeFromStops(self,nodes,GRAPH): ### ADDED TO CLASS        
     # def routeFromStops(nodes,GRAPH): ### ADDED TO CLASS
         PATH_NODES = [];
         for i,node in enumerate(nodes):
-            if i<len(nodes)-1:
-
-                try:
-                    start_node = node; end_node = nodes[i+1]
-                    path = nx.shortest_path(GRAPH, source=start_node, target=end_node,weight = 'c'); #, weight=None);
-                    PATH_NODES = PATH_NODES + path
-                except:
-                    PATH_NODES = PATH_NODES + [];
+            if not(node==None):
+                if i<len(nodes)-1:
+                    try:
+                        start_node = node; end_node = nodes[i+1]
+                        path = nx.shortest_path(GRAPH, source=start_node, target=end_node,weight = 'c'); #, weight=None);
+                        PATH_NODES = PATH_NODES + path
+                    except:
+                        PATH_NODES = PATH_NODES + [];
 
         PATH_EDGES = [];
         for i,node in enumerate(PATH_NODES):
@@ -6155,18 +7487,23 @@ class GROUP:
 
 
     def routesFromManifest(self): #MDF,GRAPHS): ### ADDED TO CLASS
-    # def routesFromManifest(MDF,GRAPHS): ### ADDED TO CLASS
-        max_id_num = int(np.max(list(MDF['run_id'])))+1
+    # def routesFromManifest(MDF,GRAPHS): ### ADDED TO CLASSA
+        MDF = self.current_MDF;
         PLANS = {};
-        for i in range(max_id_num):
-            ZZ = MDF[MDF['run_id']==i]
-            ZZ = list(ZZ.sort_values(['scheduled_time'])['drive_node'])
-            out = routeFromStops(ZZ,GRAPHS['drive']);
-            PLANS[i] = out.copy();
+        if len(MDF)>0:
+            GRAPHS = self.GRAPHS;    
+            max_id_num = int(np.max(list(MDF['run_id'])))+1
+            for i in range(max_id_num):
+                ZZ = MDF[MDF['run_id']==i]
+                ZZ = list(ZZ.sort_values(['scheduled_time'])['drive_node'])
+                out = self.routeFromStops(ZZ,GRAPHS['drive']);
+                PLANS[i] = out.copy();
         return PLANS
 
-    def singleRoutesFromManifest(self): #MDF,GRAPHS): ### ADDED TO CLASS
+    def singleRoutesFromManifest(self,version='by_nodes'): #,MDF,GRAPHS): ### ADDED TO CLASS
     # def singleRoutesFromManifest(MDF,GRAPHS): ### ADDED TO CLASS
+        MDF = self.current_MDF;
+        GRAPHS = self.GRAPHS;
         max_id_num = int(np.max(list(MDF['run_id'])))+1
         PLANS = {};
         for i in range(max_id_num):
@@ -6178,13 +7515,20 @@ class GROUP:
                 inds = np.where(ZZ['booking_id']==idd)[0]
                 ZZZ = ZZ.iloc[inds[0]:inds[1]+1];
                 zz = list(ZZZ['drive_node'])
-                out = routeFromStops(zz,GRAPHS['drive']);
+                out = self.routeFromStops(zz,GRAPHS['drive']);
                 node1 = int(zz[0]);
                 node2 = int(zz[-1]);
-                PLANS[i][(node1,node2)] = {}
-                PLANS[i][(node1,node2)]['booking_id'] = idd;
-                PLANS[i][(node1,node2)]['nodes'] = out['nodes']
-                PLANS[i][(node1,node2)]['edges'] = out['edges'];
+                if version == 'by_nodes':
+                    PLANS[i][(node1,node2)] = {}
+                    PLANS[i][(node1,node2)]['booking_id'] = idd;
+                    PLANS[i][(node1,node2)]['nodes'] = out['nodes']
+                    PLANS[i][(node1,node2)]['edges'] = out['edges'];
+                elif version == 'by_booking_ids':
+                    PLANS[i][idd] = {}
+                    PLANS[i][idd]['orig_dest'] = (node1,node2); 
+                    PLANS[i][idd]['nodes'] = out['nodes']
+                    PLANS[i][idd]['edges'] = out['edges'];
+
         return PLANS        
 
     def assignCostsFromManifest(self,active_segs,all_segs,nodes,MDF,NETWORK,ave_cost,track=True): #active_trips,nodes,MDF,WORLD,ave_cost,track=True):  ### ADDED TO CLASS
@@ -6201,18 +7545,43 @@ class GROUP:
         # print(MDF['run_id'])
         # print(list(MDF['run_id'].unique()))
         # adsfasdfasd
-
         
         SEG_DATA = {};
-
         if len(MDF)>0:
-            runids = list(MDF['run_id'].unique())
 
+            ############################################################################################
+            ############################################################################################
+            ############################################################################################            
+            # PLANS = self.routesFromManifest(MDF,self.GRAPHS)
+            PLANS = self.singleRoutesFromManifest(version='by_booking_ids')
+            # print(PLANS2)
+            # asdfasdfasdf
+
+            # for runid in PLANS:
+            #     PLAN = PLANS[runid];
+            #     for trip in PLAN:
+            #         TRIP = PLAN[trip];
+            #         node1 = trip[0]; node2 = trip[1];
+            #         # tag = 'ondemand'+'_'+group+'_'+'run'+str(runid)+'_'+str(node1)+'_'+str(node2);
+            #         # ONDEMAND_TRIPS[tag] = TRIP['edges'];
+            #         # ondemand_trip_tags.append(tag);
+            #         # tags.append(tag)
+            #         tag = 'ondemand'+'_'+group+'_'+str(node1)+'_'+str(node2);
+            #         ONDEMAND_TRIPS[tag] = TRIP['edges'];
+            #         ondemand_trip_tags.append(tag);
+            ############################################################################################
+            ############################################################################################
+            ############################################################################################
+
+            runids = list(MDF['run_id'].unique())
             for runid in runids:
+
                 MDF2 = MDF[MDF['run_id'] == runid];
                 MDF2 = MDF2.sort_values(by="scheduled_time")  
                 RUN = self.runs[runid];
                 RUN.DF = MDF2;
+
+
 
                 run_start_time = np.min(MDF2['scheduled_time']);
                 run_end_time = np.max(MDF2['scheduled_time']);
@@ -6224,17 +7593,20 @@ class GROUP:
                 bookingids = MDF2['booking_id'].unique();
 
                 no_passenger_time = 0;
-
                 num_passengers = [];
                 PTT = 0; PMT = 0;
+
                 for bookingid in bookingids:
+
                     mask1 = (MDF2['booking_id'] == bookingid) & (MDF2['action'] == 'pickup')
                     mask2 = (MDF2['booking_id'] == bookingid) & (MDF2['action'] == 'dropoff')
                     ind1 = np.where(mask1)[0][0]
                     ind2 = np.where(mask2)[0][0]
+
                     # PASSEN = MDF2[MDF2['booking_id'] == bookingid]
                     PICKUP = MDF2.iloc[ind1]; #PASSEN[PASSEN['action'] == 'pickup'];
                     DROPOFF = MDF2.iloc[ind2]; #PASSEN[PASSEN['action'] == 'dropoff'];
+
                     time1 = PICKUP['scheduled_time'];
                     time2 = DROPOFF['scheduled_time'];
                     MDF3 = MDF2.iloc[ind1:ind2+1];
@@ -6245,13 +7617,20 @@ class GROUP:
                     SEG_DATA[bookingid]['current_num_passengers'] = current_num_passengers ######
                     SEG_DATA[bookingid]['pickup_time_scheduled'] = time1;
                     SEG_DATA[bookingid]['dropoff_time_scheduled'] = time2;
+                    # path_nodes = PLANS[runid][bookingid]['nodes']
+                    # SEG_DATA[bookingid]['path'] = path_nodes;
+
 
                     PTT = PTT + (time2 - time1);
                     PMT = PMT + (time2 - time1);
 
+
+
+
                 RUN.total_passengers = len(bookingids)
                 RUN.max_num_passengers = np.max(num_passengers);
                 RUN.ave_num_passengers = np.sum(num_passengers)/len(num_passengers);
+
 
                 RUN.VTT.append(VMT)
                 RUN.PTT.append(PMT)
@@ -6267,6 +7646,7 @@ class GROUP:
                 RUN.current_PMT = PMT
                 RUN.current_VMTbyPMT = VMT/PMT;
 
+
         ######################################################        ######################################################        ######################################################
         ######################################################        ######################################################        ######################################################        
 
@@ -6280,64 +7660,121 @@ class GROUP:
             SEG = SEGS[seg];
             node1 = seg[0]
             node2 = seg[1]
-            booking_id = NETWORK.segs[seg].booking_id
+            booking_id = SEG.booking_id
             main_node_id1 = nodes[seg[0]]['main']
             main_node_id2 = nodes[seg[1]]['main']
             curr_node_id1 = nodes[seg[0]]['curr']
             curr_node_id2 = nodes[seg[1]]['curr']
 
-            try: 
-                # mask1 = (MDF['booking_id'] == booking_id) & (MDF['node_id'] == curr_node_id1) & (MDF['action'] == 'pickup');
-                # mask2 = (MDF['booking_id'] == booking_id) & (MDF['node_id'] == curr_node_id2) & (MDF['action'] == 'dropoff');
-                mask1 = (MDF['node_id'] == curr_node_id1) & (MDF['action'] == 'pickup');
-                mask2 = (MDF['node_id'] == curr_node_id2) & (MDF['action'] == 'dropoff');
+            # print(curr_node_id1)
+            # print(curr_node_id2)
+            # try: 
+            # mask1 = (MDF['booking_id'] == booking_id) & (MDF['node_id'] == curr_node_id1) & (MDF['action'] == 'pickup');
+            # mask2 = (MDF['booking_id'] == booking_id) & (MDF['node_id'] == curr_node_id2) & (MDF['action'] == 'dropoff');
+            # mask1 = (MDF['node_id'] == curr_node_id1) & (MDF['action'] == 'pickup');
+            # mask2 = (MDF['node_id'] == curr_node_id2) & (MDF['action'] == 'dropoff');
+            mask1 = (MDF['booking_id'] == booking_id) & (MDF['action'] == 'pickup');
+            mask2 = (MDF['booking_id'] == booking_id) & (MDF['action'] == 'dropoff');
 
-                time1 = MDF[mask1]['scheduled_time'][0];
-                time2 = MDF[mask2]['scheduled_time'][0];
-                run_id = int(MDF[mask1]['run_id'][0]);
+            # print(MDF[mask1]['scheduled_time'].iloc[0])
+            # print(MDF[mask2]['scheduled_time'].iloc[0])
 
-                if booking_id in SEG_DATA:
-                    current_num_passengers = SEG_DATA[booking_id]['current_num_passengers']
-                    # = SEG_DATA[booking_id]['current_num_passengers']
-                    # = SEG_DATA[booking_id]['current_num_passengers']
-                    # print('booking id found...',booking_id)
-                else:
-                    current_num_passengers = 1;
+            time1 = list(MDF[mask1]['scheduled_time'])
+            time2 = list(MDF[mask2]['scheduled_time'])
 
-
-                SEG.num_passengers = current_num_passengers; 
-
-
-                SEG.pickup_time_scheduled = time1;
-                SEG.dropoff_time_scheduled = time2; 
-                SEG.pickup_time = time1;
-                SEG.dropoff_time = time2; 
-                SEG.run_id = run_id;
-
-
+            if len(time1)>0 and len(time2)>0:
+                time1 = time1[0]
+                time2 = time2[0];
                 time_diff = np.abs(time2-time1)
+                run_id = int(list(MDF[mask1]['run_id'])[0]);
+            else:
+                time1 = None;
+                time2 = None;
+                time_diff = None;
+                run_id = None;
 
-                actual_costs[seg] = time_diff;
-                run_ids[seg] = run_id;
 
-                runs_info[seg] = {}
-                runs_info[seg]['runid'] = run_id;
-                
-                MDF2 = MDF[MDF['run_id'] == run_id]
-                ind1 = np.where(MDF2['node_id'] == curr_node_id1)[0][0];
-                ind2 = np.where(MDF2['node_id'] == curr_node_id2)[0][0];
-                MDF2 = MDF2.iloc[ind1:ind2+1]
-                runs_info[seg]['num_passengers'] = MDF2['booking_id'].nunique();
+            if booking_id in SEG_DATA:
+                current_num_passengers = SEG_DATA[booking_id]['current_num_passengers']
+                # = SEG_DATA[booking_id]['current_num_passengers']
+                # = SEG_DATA[booking_id]['current_num_passengers']
+                # print('booking id found...',booking_id)
+            else:
+                current_num_passengers = 1;
 
-                if time_diff < 7200:
+
+            SEG.num_passengers = current_num_passengers; 
+
+            SEG.pickup_time_scheduled = time1;
+            SEG.dropoff_time_scheduled = time2; 
+            SEG.pickup_time = time1;
+            SEG.dropoff_time = time2; 
+            SEG.run_id = run_id;
+
+
+            if run_id in PLANS:
+                PLAN = PLANS[run_id];
+                if booking_id in PLAN:
+                    path_nodes = PLANS[run_id][booking_id]['nodes']
+                    dist = SEG.pathCost(path_nodes,self.GRAPHS['drive'],weight='dist');
+                    SEG.current_path = path_nodes;
+                    # print(dist)
+                else:
+                    dist = None;
+                    SEG.current_path = None;
+            else:
+                dist = None;
+                SEG.current_path = None;
+            #####
+            # GRAPH = self.GRAPHS['drive']
+            # weight = 'dist';
+            # cost = 0;
+            # path = path_nodes;
+            # # print(path)
+            # for i in range(len(path)-1):
+            #     node1 = path[i]
+            #     node2 = path[i+1];
+            #     # print((node1,node2) in GRAPH.edges)
+            #     test_edge = list(GRAPH.edges)[0];
+            #     if len(test_edge)==3: tag = (node1,node2,0);
+            #     else: tag = (node1,node2);
+            #     if tag in GRAPH.edges:
+            #         EDGE = GRAPH.edges[tag]
+            #         cost = cost + EDGE[weight]
+            # dist = cost
+            SEG.costs['dist'].append(dist)
+            SEG.costs['current_dist'] = dist;
+            #####
+
+            actual_costs[seg] = time_diff;
+            run_ids[seg] = run_id;
+
+            runs_info[seg] = {}
+            runs_info[seg]['runid'] = run_id;
+
+            if not(time_diff==None):
+                if time_diff < 720000:
                     times_to_average.append(time_diff);
 
+            try: 
+                MDF2 = MDF[MDF['run_id'] == run_id]
+                # print(np.where(MDF2['node_id'] == curr_node_id1));#[0][0];
+                # print(np.where(MDF2['node_id'] == curr_node_id2)); #[0][0];
+                # print(np.where(MDF2['bookingode_id'] == curr_node_id1));#[0][0];
+                # print(np.where(MDF2['node_id'] == curr_node_id2)); #[0][0];
+                # ind1 = np.where(MDF2['node_id'] == curr_node_id1)[0][0];
+                # ind2 = np.where(MDF2['node_id'] == curr_node_id2)[0][0];
+                ind1 = np.where(MDF2['booking_id'] == booking_id)[0][0];
+                ind2 = np.where(MDF2['booking_id'] == booking_id)[0][0];
+
+                MDF2 = MDF2.iloc[ind1:ind2+1]
+                runs_info[seg]['num_passengers'] = MDF2['booking_id'].nunique();
             except: 
-                actual_costs[seg] = 1000000000.;
+                runs_info[seg]['num_passengers'] = 1;
+                # actual_costs[seg] = 1000000000.;
                 # pass; #time_diff = 10000000000.
 
             # print(time_diff)
-
             # if False:
             #     WORLD[mode]['trips'][trip]['costs']['time'].append(time_diff);
             #     WORLD[mode]['trips'][trip]['costs']['current_time'] = time_diff;
@@ -6348,11 +7785,11 @@ class GROUP:
             #             WORLD[mode]['trips'][trip]['costs'][factor].append(0.)
             #             WORLD[mode]['trips'][trip]['costs']['current_'+factor] = 0. 
 
+
         average_time = np.mean(np.array(times_to_average))
         print('...average manifest trip time: ',average_time)
         # est_ave_time = average_time
         est_ave_time = ave_cost
-
 
 
         for i,seg in enumerate(active_segs):#active_trips):
@@ -6374,13 +7811,12 @@ class GROUP:
                 NETWORK.segs[seg].costs['current_time'] = prev_time;
 
 
-            factors = ['dist','time','money','conven','switches']
+            factors = ['money','conven','switches']; #,'dist','time']
             for j,factor in enumerate(factors):#WORLD[mode]['trips'][trip]['costs']):
                 if not(factor == 'time'): 
                     # WORLD[mode]['trips']['costs'][factor] = 0. 
                     NETWORK.segs[seg].costs[factor].append(0.);
                     NETWORK.segs[seg].costs['current_'+factor] = 0. 
-
         return average_time,times_to_average
 
 
@@ -6589,8 +8025,19 @@ class TRIP:
     def applyLogitChoice(self,weights,values,offsets = [],ver='weighted_sum'):
         cost = 100000000.;
         if len(offsets) == 0: offsets = np.zeros(len(weights));
+
         if ver == 'weighted_sum':
-            cost = weights@values;
+
+            values_filtered = [];
+            weights_filtered = [];
+            for i,value in enumerate(values):
+                weight = weights[i]
+                if isinstance(value, (int, float, complex)) and isinstance(weight, (int, float, complex)):
+                    values_filtered.append(value)
+                    weights_filtered.append(weight)
+            values_filtered = np.array(values_filtered)
+            weights_filtered = np.array(weights_filtered)
+            cost = weights_filtered@values_filtered;
         return cost
 
 class SEG:
@@ -6601,17 +8048,18 @@ class SEG:
         self.mode = mode
         self.seg_id = seg_id;
         self.source = seg[0]
-        self.target = seg[0]
+        self.target = seg[1]
         self.start_time = 0;
         self.end_time = 14400;
         self.factors = factors;
         self.active = True;
+        self.CONVERTER = CONVERTER
 
         self.trip_ids = [];
         self.people = [];
 
         self.uncongested = {};
-
+        self.uncongested['costs'] = {'time':None,'dist':None,'money':None,'conven':None,'switches':None};
 
         # self.pickup_time_window_start = PERSON.pickup_time_window_start;
         # self.pickup_time_window_end = PERSON.pickup_time_window_end;
@@ -6706,17 +8154,29 @@ class SEG:
 
             # if len(PERSON)>0:
             #     if 'group_options' in PERSON: WORLD[mode]['trips'][trip]['group_options'] = PERSON['group_options'];
-
             # WORLD[mode]['trips'][trip][''] asdfasd
 
-
+    def pathCost(self,path,GRAPH,weight='c'):
+        cost = 0;
+        # print(path)
+        for i in range(len(path)-1):
+            node1 = path[i]
+            node2 = path[i+1];
+            # print((node1,node2) in GRAPH.edges)
+            test_edge = list(GRAPH.edges)[0];
+            if len(test_edge)==3: tag = (node1,node2,0);
+            else: tag = (node1,node2);
+            if tag in GRAPH.edges:
+                EDGE = GRAPH.edges[tag]
+                cost = cost + EDGE[weight]
+        return cost
 
     def planSeg(self,mode,GRAPHS,FEEDS,NETWORKS,CONVERTER,ONDEMAND,track=False):
         NETWORK = NETWORKS[mode];
         if mode == 'drive' or mode == 'walk':
             self.planDijkstraSeg(mode,NETWORK,GRAPHS,track=track);
         if mode == 'gtfs':
-            self.planGTFSSeg(mode,NETWORK,GRAPHS,FEEDS,CONVERTER,ONDEMAND,track=track);
+            self.planGTFSSeg(mode,NETWORK,GRAPHS,FEEDS,self.CONVERTER,ONDEMAND,track=track);
         if mode == 'ondemand':
             pass
             #self.planDelivSeg(mode,NETWORKS,GRAPHS,FEEDS,CONVERTER,ONDEMAND,track=track);
@@ -6729,14 +8189,17 @@ class SEG:
         GRAPH = GRAPHS[mode];
         try:
             temp = nx.multi_source_dijkstra(GRAPH, [self.source], target=self.target, weight='c'); #Dumbfunctions
+            # path = nx.shortest_path(GRAPH, source=self.source, target=self.target, weight='c'); #, method='dijkstra')[source]
             travel_time = temp[0];
-            path = temp[1]; 
-            distance = 0; 
+            path = temp[1];
+            distance = self.pathCost(path,GRAPH,weight='dist');
         except: 
-            #print('no path found for bus trip ',trip,'...')
+            print('no path found for dijkstra seg ',(self.source,self.target),'in mode',mode,'...')
             travel_time = 10000000000;
-            distance = 1000000000000;
+            distance = 100000000000;
             path = [];
+
+        # print(path)
 
         self.costs['current_dist'] = distance
         self.costs['current_time'] = travel_time
@@ -6788,40 +8251,52 @@ class SEG:
         PREV_NODES = NETWORK.precompute['prev_nodes'];
         PREV_TRIPS = NETWORK.precompute['prev_trips'];
 
-        try:
-            distance = REACHED[source][-1][target]
-            # print(REACHED[source])
-        except:
-            distance = 1000000000000.;
+        # print((self.source,self.target))
+        # print(self.source in PREV_NODES)
+        # print(self.target in PREV_NODES)
 
         try:
-            stop_list,trip_list = create_chains(source,target,PREV_NODES,PREV_TRIPS);
+            time = REACHED[self.source][-1][self.target]
+            # print(REACHED[source])
+        except:
+            time = 1000000000000.;
+            distance = 10000000000.;
+
+        try:
+            stop_list,trip_list = create_chains(self.source,self.target,PREV_NODES,PREV_TRIPS);
             #### Computing Number of switches...
             init_stop = stop_list[0];
             num_segments = 1;
             for i,stop in enumerate(stop_list):
                 if stop == init_stop: num_segments = len(stop_list)-i-1;
-
             _,stopList,edgeList = list_inbetween_stops(FEED,stop_list,trip_list); #,GRAPHS);
-            path,_ = gtfs_to_transit_nodesNedges(stopList,NODES)
+            path,_ = gtfs_to_transit_nodesNedges(stopList,self.CONVERTER)
+            distance = self.pathCost(path,GRAPH,weight='dist');
+            switches = num_segments - 1;
+            # print('gtfs path found.')
         except: 
-            #print('no path found for bus trip ',trip,'...')
+            # print('no path found for gtfs seg ',(self.source,self.target),'...')
             num_segments = 1;
+            switches = num_segments - 1;
             path = [];
-        # print('num segs gtfs: ',num_segments)                
+            distance = 100000000000.;
+        # # print('num segs gtfs: ',num_segments)                
+        # print(path)
 
-        self.costs['current_time'] = 1.*distance
+        self.costs['current_dist'] = distance;
+        self.costs['current_time'] = 1.*time
         self.costs['current_money'] = 1;
-        self.costs['current_conven'] = 1; 
-        self.costs['current_switches'] = num_segments - 1; 
+        self.costs['current_conven'] = 0; 
+        self.costs['current_switches'] = switches; 
         self.current_path = path;
         self.mass = mass;
         
         if track==True:
-            self.costs['time'].append(distance)
+            self.costs['dist'].append(distance)
+            self.costs['time'].append(time)
             self.costs['money'].append(1)
-            self.costs['conven'].append(1)
-            self.costs['switches'].append(num_segments-1)
+            self.costs['conven'].append(0)
+            self.costs['switches'].append(switches)
             self.path.append(path);
 
         num_missing_edges = 0;
@@ -6830,13 +8305,13 @@ class SEG:
             for j,node in enumerate(path):
                 if j < len(path)-1:
                     edge = (path[j],path[j+1],0)
-                    if edge in NETWORK['edge_masses']:
-                        edge_mass = NETWORK['edge_masses'][edge][-1] + mass;
+                    if edge in NETWORK.edge_masses:
+                        edge_mass = NETWORK.edge_masses[edge][-1] + mass;
                         # edge_cost = 1.*edge_mass + 1.;
-                        NETWORK['edge_masses'][edge][-1] = edge_mass;
+                        NETWORK.edge_masses[edge][-1] = edge_mass;
                         # WORLD[mode]['edge_costs'][edge][-1] = edge_cost;
                         # WORLD[mode]['current_edge_costs'][edge] = edge_cost;    
-                        NETWORK['current_edge_masses'][edge] = edge_mass;
+                        NETWORK.current_edge_masses[edge] = edge_mass;
                     else:
                         num_missing_edges = num_missing_edges + 1
                         # if np.mod(num_missing_edges,10)==0:
@@ -6974,6 +8449,8 @@ class NETWORK:
         self.active_segs = [];
 
         self.booking_ids = []; ### new
+        dists = self.createEdgeDists();
+        nx.set_edge_attributes(self.GRAPH,dists,'dist');
 
         nodes = self.GRAPH.nodes
         edges = self.GRAPH.edges
@@ -7071,7 +8548,30 @@ class NETWORK:
                 EDGE['cost_fx'] = [t0];
                 POLYS[edge] = [t0];
 
-        return POLYS            
+        return POLYS
+
+    ######################################
+    def createEdgeDists(self):
+        DISTS = {};        
+        GRAPH = self.GRAPH; #S[mode];
+        for i,edge in enumerate(GRAPH.edges):
+            EDGE = GRAPH.edges[edge];
+            if 'length' in EDGE: DISTS[edge] = EDGE['length']; 
+            elif 'geometry' in EDGE: DISTS[edge] = EDGE['geometry'].length*111139 #degrees to meters
+            else: DISTS[edge] = 0;
+        return DISTS
+
+    # def pathCost(path,weight='c'):
+    #     GRAPH = self.GRAPH
+    #     cost = 0;
+    #     for i in range(len(path)-1):
+    #         node1 = path[i]
+    #         node2 = path[i+1];
+    #         EDGE = GRAPH.edges[(node1,node2)]
+    #         cost = cost + EDGE[weight]
+    #     return cost
+
+
 
     def removeMassFromEdges(self): #mode,WORLD,GRAPHS):  #DONE1
         # NETWORK = WORLD[mode]
@@ -7130,7 +8630,11 @@ class NETWORK:
 
         # clear_active = False; 
 
-
+        ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE 
+        ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE 
+        ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE 
+        ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE 
+        ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE ###### DRIVE    
 
         if self.mode == 'drive':
         # def world_of_drive(WORLD,PEOPLE,GRAPHS,verbose=False,clear_active=True): ##### ADDED TO CLASS 
@@ -7212,6 +8716,12 @@ class NETWORK:
                 SEG = self.segs[seg];
                 SEG.mass = 0;
 
+
+        ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK 
+        ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK 
+        ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK 
+        ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK 
+        ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK ######## WALK 
 
         if self.mode == 'walk':
 
@@ -7297,7 +8807,11 @@ class NETWORK:
                 SEG = self.segs[seg];
                 SEG.mass = 0;
 
-
+        ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND 
+        ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND 
+        ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND 
+        ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND 
+        ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND ###### ONDEMAND 
 
         if self.mode == 'ondemand':
         # def world_of_ondemand(WORLD,PEOPLE,DELIVERIES,GRAPHS,verbose=False,show_delivs='all',clear_active=True): ##### ADDED TO CLASSA 
@@ -7375,41 +8889,11 @@ class NETWORK:
                         GROUP.updateTravelTimeMatrix(nodes_to_update,nodeids_to_update,ONDEMAND); #GRAPHS['ondemand']);
                         payload,nodes = GROUP.constructPayload(segs_to_plan,ONDEMAND,self,GRAPHS);
 
-
-
-
-                        # print('')
-                        # print(payload.keys())
-                        # print('')
-                        # print(payload['date'])
-                        # print(payload['depot'])   
-                        # print('')
-                        # print(payload['driver_runs'])
-                        # print('')
-                        # print(payload['time_matrix'][0][:10])
-                        # print('')
-                        # print(payload['requests'])
-                        # asdfasdf
-
-                        #asdfasdfasdfasdfasdf
-                        # import pickle
-                        # fileObj = open('payload1', 'wb')
-                        # pickle.dump(payload,fileObj)
-                        # fileObj.close()
-                        # print(payload['driver_runs'])
-                        # print(payload['time_matrix'][0][:10])
-                        # print('')
-                        # print(payload['requests'][0])
-                        # print(payload['requests'][1])
-                        # print(payload['requests'][2])
-                        # print(payload['requests'][3])
-                        # asdfasdf
-
                         manifests = optimizer.offline_solver(payload) 
                         # manifest = optimizer(payload) ####
                         # manifest = fakeManifest(payload)
 
-                        PDF = GROUP.payloadDF(payload,GRAPHS)
+                        PDF = GROUP.payloadDF(payload,GRAPHS,include_drive_nodes = True);
                         MDF = GROUP.manifestDF(manifests,PDF)
 
                         GROUP.current_PDF = PDF;
@@ -7418,8 +8902,12 @@ class NETWORK:
                         GROUP.current_manifest = manifests;
 
 
+
                     #average_time,times_to_average = GROUP.assignCostsFromManifest(trips_to_plan,nodes,MDF,WORLD,WORLD[mode]['current_expected_cost'])
+
                     average_time,times_to_average = GROUP.assignCostsFromManifest(segs_to_plan,self.segs,nodes,MDF,self,GROUP.current_expected_cost)
+
+
 
                     # print(poly)
                     # print(WORLD[mode]['current_expected_cost'])
@@ -7472,6 +8960,15 @@ class NETWORK:
                 ########### -- XX START HERE ---- ####################
 
 
+        ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS 
+        ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS 
+        ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS 
+        ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS 
+        ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS 
+        ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS ######## GTFS 
+
+
+
         if self.mode == 'gtfs':
 
         ####### world of transit ####### world of transit ####### world of transit ####### world of transit ####### world of transit 
@@ -7519,6 +9016,8 @@ class NETWORK:
                     SEG = self.segs[seg];
                     mass = SEG.mass
                     SEG.planGTFSSeg(mode,self,GRAPHS,FEEDS,CONVERTER,ONDEMAND,mass=mass,track=True);
+                    # self.planGTFSSeg(mode,NETWORK,GRAPHS,FEEDS,self.CONVERTER,ONDEMAND,track=track);
+
                     self.segs[seg].active = False;
                 else:
                     if len(self.segs[seg].costs['time'])==0:
@@ -7545,7 +9044,7 @@ class NETWORK:
 
 
     def computeUncongestedEdgeCosts(self):  #### ADDED TO CLASS 
-    # def compute_UncongestedEdgeCosts(WORLD,GRAPHS):  #### ADDED TO CLASS 
+    # def compute_UncongestedEdgeCosts(WORLD,GRAPHS):  #### AeDDED TO CLASS 
         # modes = ['drive','walk'];
         # for mode in modes:
         GRAPH = self.GRAPH
@@ -7570,21 +9069,27 @@ class NETWORK:
 # def convertNode(self,node,from_mode,to_mode,from_type = 'graph',to_type = 'graph',verbose=False):
 #         transit_node2 = CONVERTER.convertNode(transit_node2,'gtfs','gtfs',to_type='feed')
     
+            # try:
+            if self.mode == 'gtfs': 
+                path = SEG.current_path 
+                time = SEG.costs['current_time']
+                distance = SEG.costs['current_dist'];
 
-
-            try:
+            else: 
                 temp = nx.multi_source_dijkstra(GRAPH, [source], target=target, weight='c0'); #Dumbfunctions
-                distance = temp[0];
+                time = temp[0];                
                 path = temp[1]; 
-            except: 
-                #print('no path found for bus trip ',trip,'...')
-                distance = 1000000000000;
-                path = [];
+                distance = SEG.pathCost(path,GRAPH,weight='dist')
+            # except: 
+            #     #print('no path found for bus trip ',trip,'...')
+            #     time = None;
+            #     distance = None;
+            #     path = [];
             SEG.uncongested = {};
             SEG.uncongested['path'] = path;
             SEG.uncongested['costs'] = {}; 
             SEG.uncongested['costs']['dist'] = distance;
-            SEG.uncongested['costs']['time'] = distance;
+            SEG.uncongested['costs']['time'] = time;
             SEG.uncongested['costs']['money'] = 0;
             SEG.uncongested['costs']['conven'] = 0;
             SEG.uncongested['costs']['switches'] = 0;        
@@ -7635,8 +9140,6 @@ class PERSON:
             STATS[mode] = {};
             STATS[mode]['mean'] = dict(zip(factors,means));
             STATS[mode]['stdev'] = dict(zip(factors,stdevs));
-
-
 
 
 
@@ -8114,6 +9617,84 @@ class PERSON:
                 #     continue
 
 
+def create_chains(stop1,stop2,PREV_NODES,PREV_TRIPS,max_trans = 4): ### ADDED TO CLASS
+    STOP_LIST = [stop2];
+
+    TRIP_LIST = [];
+    for i in range(max_trans):
+        
+        # try: 
+        # print(PREV_NODES[stop][-(i+1)][stop])
+        stop = STOP_LIST[-(i+1)]
+        # print(stop in PREV_NODES)
+        stop2 = PREV_NODES[stop1][-(i+1)][stop]     
+        trip = PREV_TRIPS[stop1][-(i+1)][stop]
+        # except:
+        #     stop2 = None;
+        #     trip = None;
+
+        STOP_LIST.insert(0,stop2);
+        TRIP_LIST.insert(0,trip);
+    return STOP_LIST, TRIP_LIST
+
+def list_inbetween_stops(feed,STOP_LIST,TRIP_LIST):#,GRAPHS):  ### ADDED TO CLASS
+
+
+    # feed_dfs = GRAPHS['feed_details'];
+
+    stopList = [];
+    edgeList = []; 
+    segs = [];
+    prev_node = STOP_LIST[0];
+    for i,trip in enumerate(TRIP_LIST):
+        if not(trip==None):
+            stop1 = STOP_LIST[i];
+            stop2 = STOP_LIST[i+1];    
+            stops = [];
+
+            # stop_times = feed_dfs['stop_times'];
+            df = feed.stop_times[feed.stop_times['trip_id']==trip]
+
+            seq1 = list(df[df['stop_id'] == stop1]['stop_sequence'])[0]
+            seq2 = list(df[df['stop_id'] == stop2]['stop_sequence'])[0]
+            mask1 = df['stop_sequence'] >= seq1;
+            mask2 = df['stop_sequence'] <= seq2;
+            df = df[mask1 & mask2]
+            
+
+            df = df.sort_values(by=['stop_sequence'])
+            seg = list(df['stop_id'])
+            segs.append(seg)
+
+
+            
+            for j,node in enumerate(seg):
+                if j<(len(seg)-1):
+                    stopList.append(node)
+                    edgeList.append((prev_node,node,0))
+                    prev_node = node
+    return segs,stopList,edgeList[1:]
+
+
+def gtfs_to_transit_nodesNedges(stopList,CONVERT): #### ADDED TO CLASS
+
+    nodeList = [];
+    edgeList = [None];
+    prev_node = None;
+    for i,stop in enumerate(stopList):
+        # try: 
+        # print(CONV)
+        new_node = CONVERT.convertNode(stop,'gtfs','gtfs',from_type='feed')
+
+    # def convertNode(self,node,from_mode,to_mode,from_type = 'graph',to_type = 'graph',verbose=False):
+
+
+        nodeList.append(new_node)
+        edgeList.append((prev_node,new_node,0))
+        # except:
+        #     pass
+    edgeList = edgeList[1:]
+    return nodeList,edgeList
 
 class RAPTOR:
     def __init__(self,params): pass
@@ -8361,70 +9942,7 @@ class RAPTOR:
     ########### -------------------- FROM RAPTOR FORMAT TO NETWORKx FORMAT ------------------- #################
     ########### -------------------- FROM RAPTOR FORMAT TO NETWORKx FORMAT ------------------- #################
      
-    def create_chains(stop1,stop2,PREV_NODES,PREV_TRIPS,max_trans = 4): ### ADDED TO CLASS
-        STOP_LIST = [stop2];
-        TRIP_LIST = [];
-        for i in range(max_trans):
-            stop = STOP_LIST[-(i+1)]
-            stop2 = PREV_NODES[stop1][-(i+1)][stop]           
-            trip = PREV_TRIPS[stop1][-(i+1)][stop]
-            STOP_LIST.insert(0,stop2);
-            TRIP_LIST.insert(0,trip);        
 
-        return STOP_LIST, TRIP_LIST
-
-    def list_inbetween_stops(feed,STOP_LIST,TRIP_LIST):#,GRAPHS):  ### ADDED TO CLASS
-
-
-        # feed_dfs = GRAPHS['feed_details'];
-
-        stopList = [];
-        edgeList = []; 
-        segs = [];
-        prev_node = STOP_LIST[0];
-        for i,trip in enumerate(TRIP_LIST):
-            if not(trip==None):
-                stop1 = STOP_LIST[i];
-                stop2 = STOP_LIST[i+1];    
-                stops = [];
-
-                # stop_times = feed_dfs['stop_times'];
-                df = feed.stop_times[feed.stop_times['trip_id']==trip]
-
-                seq1 = list(df[df['stop_id'] == stop1]['stop_sequence'])[0]
-                seq2 = list(df[df['stop_id'] == stop2]['stop_sequence'])[0]
-                mask1 = df['stop_sequence'] >= seq1;
-                mask2 = df['stop_sequence'] <= seq2;
-                df = df[mask1 & mask2]
-                
-
-                df = df.sort_values(by=['stop_sequence'])
-                seg = list(df['stop_id'])
-                segs.append(seg)
-
-
-                
-                for j,node in enumerate(seg):
-                    if j<(len(seg)-1):
-                        stopList.append(node)
-                        edgeList.append((prev_node,node,0))
-                        prev_node = node
-        return segs,stopList,edgeList[1:]
-
-
-    def gtfs_to_transit_nodesNedges(stopList,NODES): #### ADDED TO CLASS
-        nodeList = [];
-        edgeList = [None];
-        prev_node = None;
-        for i,stop in enumerate(stopList):
-            try: 
-                new_node = WORLD.CONVERTER.convertNode(stop,'gtfs','transit')
-                nodeList.append(new_node)
-                edgeList.append((prev_node,new_node,0))
-            except:
-                pass
-        edgeList = edgeList[1:]
-        return nodeList,edgeList
 
 
     def calculateGTFStrips(feed): #,gdf=[]):  ### ADDED TO CLASS
