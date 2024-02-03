@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrow
 from itertools import product 
 from random import sample
-
+ 
 from shapely.geometry import Polygon, Point, LineString
 
 import sklearn as sk
