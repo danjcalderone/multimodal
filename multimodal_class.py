@@ -91,7 +91,7 @@ import os
 import pickle
 
 
-os.chdir('/Users/dan/Documents/multimodal/')
+os.chdir(path_to_multimodalsim)
 
 ########### BASIC ########### BASIC ########### BASIC ########### BASIC ########### BASIC 
 ########### BASIC ########### BASIC ########### BASIC ########### BASIC ########### BASIC 
@@ -4316,7 +4316,7 @@ class WORLD:
         for group in list(self.grpsDF['group']):
             num_drivers = 10;
             if group in self.num_drivers_per_group:
-                num_drivers = self.num_drivers_per_group[group];
+                num_drivers = int(self.num_drivers_per_group[group]);
             print('adding',num_drivers,'to',group,'...')
             params3 = {'num_drivers':num_drivers,
                     'am_capacity':8, 'wc_capacity':2,
