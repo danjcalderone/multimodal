@@ -4284,7 +4284,7 @@ class WORLD:
     def initCONVERTER(self):
         params2 = {};
         if 'background' in self.inputparams: 
-            data_filename = 'runs/data2524.obj';
+            data_filename = 'INPUTS/data2524.obj';
             # data_filename = params['data_filename'];
             file = open(data_filename, 'rb')
             DATA = pickle.load(file)
